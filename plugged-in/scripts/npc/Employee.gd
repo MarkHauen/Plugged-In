@@ -28,13 +28,13 @@ var _label:  Label      = null
 func init(emp_name: String, player: Node) -> void:
 	display_name = emp_name
 	_target      = player
-	var Inv   := load("res://scripts/Inventory.gd")
+	var Inv   := load("res://scripts/economy/Inventory.gd")
 	inventory  = Inv.new()
 
 
 func _ready() -> void:
 	if inventory == null:
-		var Inv   := load("res://scripts/Inventory.gd")
+		var Inv   := load("res://scripts/economy/Inventory.gd")
 		inventory  = Inv.new()
 	_build_visual()
 

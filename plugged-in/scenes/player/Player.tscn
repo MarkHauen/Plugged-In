@@ -1,9 +1,9 @@
 [gd_scene load_steps=7 format=3 uid="uid://b5a1g7k2m1n"]
 
-[ext_resource type="Script" path="res://scripts/Player.gd" id="1_Player"]
-[ext_resource type="Script" path="res://scripts/InventoryUI.gd" id="2_InventoryUI"]
-[ext_resource type="Script" path="res://scripts/TradeUI.gd" id="3_TradeUI"]
-[ext_resource type="Script" path="res://scripts/TransferUI.gd" id="4_TransferUI"]
+[ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_Player"]
+[ext_resource type="Script" path="res://scripts/ui/InventoryUI.gd" id="2_InventoryUI"]
+[ext_resource type="Script" path="res://scripts/ui/TradeUI.gd" id="3_TradeUI"]
+[ext_resource type="Script" path="res://scripts/ui/TransferUI.gd" id="4_TransferUI"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_col"]
 size = Vector2(28, 28)

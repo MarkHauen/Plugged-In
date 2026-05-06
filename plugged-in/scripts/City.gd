@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 # =============================================================================
 #  City.gd — thin orchestrator.
@@ -6,10 +6,10 @@ extends Node2D
 # =============================================================================
 
 const NPC_SCENE := preload("res://scenes/npc/NPC.tscn")
-const BUILDING_INFO_UI_S := preload("res://scripts/BuildingInfoUI.gd")
-const RoadGraphScript := preload("res://scripts/RoadGraph.gd")
-const NPCDataViewScript := preload("res://scripts/NPCDataView.gd")
-const EconDataViewScript := preload("res://scripts/EconDataView.gd")
+const BUILDING_INFO_UI_S := preload("res://scripts/ui/BuildingInfoUI.gd")
+const RoadGraphScript := preload("res://scripts/world/RoadGraph.gd")
+const NPCDataViewScript := preload("res://scripts/ui/NPCDataView.gd")
+const EconDataViewScript := preload("res://scripts/ui/EconDataView.gd")
 const DistrictGeneratorScript := preload("res://scripts/world/DistrictGenerator.gd")
 const LandownerSystemScript := preload("res://scripts/world/LandownerSystem.gd")
 const NPCSpawnerScript := preload("res://scripts/npc/NPCSpawner.gd")

@@ -18,7 +18,7 @@ var employees: Array = []   # Array[Employee]
 
 func _ready() -> void:
 	add_to_group("player")
-	var Inventory := load("res://scripts/Inventory.gd")
+	var Inventory := load("res://scripts/economy/Inventory.gd")
 	inventory = Inventory.new()
 
 	wallet = Wallet.new()
