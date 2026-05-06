@@ -1,6 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://b5a1g7k2m1n"]
+[gd_scene load_steps=7 format=3 uid="uid://b5a1g7k2m1n"]
 
 [ext_resource type="Script" path="res://scripts/Player.gd" id="1_Player"]
+[ext_resource type="Script" path="res://scripts/InventoryUI.gd" id="2_InventoryUI"]
+[ext_resource type="Script" path="res://scripts/TradeUI.gd" id="3_TradeUI"]
+[ext_resource type="Script" path="res://scripts/TransferUI.gd" id="4_TransferUI"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_col"]
 size = Vector2(28, 28)
@@ -18,3 +21,12 @@ color = Color(0.2, 0.5, 0.9, 1)
 [node name="Camera2D" type="Camera2D" parent="."]
 position_smoothing_enabled = true
 position_smoothing_speed = 5.0
+
+[node name="InventoryUI" type="CanvasLayer" parent="."]
+script = ExtResource("2_InventoryUI")
+
+[node name="TradeUI" type="CanvasLayer" parent="."]
+script = ExtResource("3_TradeUI")
+
+[node name="TransferUI" type="CanvasLayer" parent="."]
+script = ExtResource("4_TransferUI")

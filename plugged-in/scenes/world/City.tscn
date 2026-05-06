@@ -7,4 +7,4 @@
 script = ExtResource("2_CityScript")
 
 [node name="Player" parent="." instance=ExtResource("1_PlayerScene")]
-position = Vector2(800, 600)
+position = Vector2(2940, 1800)
