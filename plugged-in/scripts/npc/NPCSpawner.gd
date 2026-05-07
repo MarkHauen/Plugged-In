@@ -46,8 +46,10 @@ func spawn_npc_at(cx: float, cy: float,
 				  pw: float, cw: float, shop_chance: float) -> void:
 	var npc_type: int = NPC.Type.POLICE if randf() < pw / (pw + cw) else NPC.Type.CIVILIAN
 	var role: String  = WorldData.NPC_ROLES[did][npc_type]
+	# Give civilians a realistic full name; police keep their role label.
+	var npc_name: String = NameDB.random_full_name() if npc_type == NPC.Type.CIVILIAN else role
 	var npc: NPC      = _npc_scene.instantiate()
-	npc.setup(npc_type, role, did, shop_chance, pref)
+	npc.setup(npc_type, npc_name, did, shop_chance, pref)
 	npc.position = Vector2(cx, cy)
 	_scene_root.add_child(npc)
 	npc.npc_clicked.connect(_on_npc_clicked)
@@ -146,7 +148,7 @@ func spawn_tourists(count: int) -> void:
 		var cy:  float      = float(d["oy"]) + randf_range(0.1, 0.9) * float(d["rows"]) * WorldData.CELL_H
 		var npc: NPC        = _npc_scene.instantiate()
 		var pref: Array     = WorldData.DISTRICT_STOREFRONT_ITEMS[did]
-		npc.setup(NPC.Type.TOURIST, "Tourist", did, 0.55, pref)
+		npc.setup(NPC.Type.TOURIST, NameDB.random_full_name(), did, 0.55, pref)
 		npc.tourist_budget = randf_range(120.0, 500.0)
 		npc.balance        = npc.tourist_budget
 		npc.position       = Vector2(cx, cy)
