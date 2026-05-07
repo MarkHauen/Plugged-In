@@ -8,9 +8,9 @@ class_name EconDataView
 const HEADERS: Array = [
 	"Biz Name", "District", "Type", "Category",
 	"Owner", "Status", "Cash", "Wages/day", "Rent/day",
-	"In Buffer", "Out Buffer",
+	"Staff", "Tenants", "In Buffer", "Out Buffer",
 ]
-const WIDTHS: Array = [155, 112, 138, 108, 138, 92, 82, 78, 78, 128, 128]
+const WIDTHS: Array = [155, 112, 138, 108, 138, 92, 82, 78, 78, 65, 65, 128, 128]
 
 const C_HDR  := Color(0.55, 0.85, 1.00)
 const C_NORM := Color(0.82, 0.82, 0.82)
@@ -24,6 +24,9 @@ const R_ODD  := Color(0.07, 0.10, 0.17, 1.0)
 var _buildings: Array         = []
 var _body:      VBoxContainer = null
 var _count_lbl: Label         = null
+var _detail_panel: PanelContainer = null
+var _detail_body:  VBoxContainer  = null
+var _detail_title: Label          = null
 
 
 func _ready() -> void:
@@ -108,6 +111,66 @@ func _build_ui() -> void:
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_body)
 
+	# ── Detail panel (right-side overlay) ────────────────────────────────
+	var dp := PanelContainer.new()
+	var dp_sty := StyleBoxFlat.new()
+	dp_sty.bg_color = Color(0.04, 0.06, 0.10, 0.98)
+	dp_sty.border_color = Color(1.00, 0.85, 0.38, 0.6)
+	dp_sty.border_width_left = 2
+	dp_sty.set_corner_radius_all(4)
+	dp.add_theme_stylebox_override("panel", dp_sty)
+	dp.mouse_filter = Control.MOUSE_FILTER_STOP
+	dp.anchor_left   = 1.0
+	dp.anchor_right  = 1.0
+	dp.anchor_top    = 0.0
+	dp.anchor_bottom = 1.0
+	dp.offset_left   = -380.0
+	dp.offset_right  = -18.0
+	dp.offset_top    = 18.0
+	dp.offset_bottom = -18.0
+	dp.visible = false
+	add_child(dp)
+	_detail_panel = dp
+
+	var dmc := MarginContainer.new()
+	dmc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dmc.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	dmc.add_theme_constant_override("margin_top",    10)
+	dmc.add_theme_constant_override("margin_bottom", 10)
+	dmc.add_theme_constant_override("margin_left",   12)
+	dmc.add_theme_constant_override("margin_right",  12)
+	dp.add_child(dmc)
+
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 4)
+	dmc.add_child(dv)
+
+	var dtr := HBoxContainer.new()
+	dv.add_child(dtr)
+
+	_detail_title = Label.new()
+	_detail_title.add_theme_font_size_override("font_size", 13)
+	_detail_title.add_theme_color_override("font_color", Color(1.00, 0.85, 0.38))
+	_detail_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dtr.add_child(_detail_title)
+
+	var dcl := Button.new()
+	dcl.text = "  ✕  "
+	dcl.pressed.connect(func() -> void: _detail_panel.visible = false)
+	dtr.add_child(dcl)
+
+	dv.add_child(HSeparator.new())
+
+	var ds := ScrollContainer.new()
+	ds.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ds.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	dv.add_child(ds)
+
+	_detail_body = VBoxContainer.new()
+	_detail_body.add_theme_constant_override("separation", 3)
+	_detail_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ds.add_child(_detail_body)
+
 
 func _refresh() -> void:
 	if _body == null:
@@ -191,13 +254,31 @@ func _make_row(meta: Dictionary, idx: int) -> PanelContainer:
 	var rent: float = float(meta.get("rent_per_day", 0.0))
 	row.add_child(_cell(("$%.0f" % rent) if rent > 0.0 else "—", WIDTHS[8], C_NORM))
 
-	# Input buffer
-	var ibuf: Dictionary = meta["input_buffer"] as Dictionary if meta.has("input_buffer") else {}
-	row.add_child(_cell(_buf_str(ibuf), WIDTHS[9], C_NORM))
+	# Staff (idx 9)
+	var staff_str: String = str(int(meta.get("_employee_count", 0))) if meta.has("_employee_count") else "—"
+	row.add_child(_cell(staff_str, WIDTHS[9], C_NORM))
 
-	# Output buffer
+	# Tenants (idx 10)
+	var tenant_str: String = str(int(meta.get("_tenant_count", 0))) if meta.has("_tenant_count") else "—"
+	row.add_child(_cell(tenant_str, WIDTHS[10], C_NORM))
+
+	# Input buffer (idx 11)
+	var ibuf: Dictionary = meta["input_buffer"] as Dictionary if meta.has("input_buffer") else {}
+	row.add_child(_cell(_buf_str(ibuf), WIDTHS[11], C_NORM))
+
+	# Output buffer (idx 12)
 	var obuf: Dictionary = meta["output_buffer"] as Dictionary if meta.has("output_buffer") else {}
-	row.add_child(_cell(_buf_str(obuf), WIDTHS[10], C_OK if not obuf.is_empty() else C_DIM))
+	row.add_child(_cell(_buf_str(obuf), WIDTHS[12], C_OK if not obuf.is_empty() else C_DIM))
+
+	# Click → drill-down
+	pc.mouse_filter = Control.MOUSE_FILTER_STOP
+	pc.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	pc.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var me := event as InputEventMouseButton
+			if me.pressed and me.button_index == MOUSE_BUTTON_LEFT:
+				_show_biz_detail(meta)
+	)
 
 	return pc
 
@@ -224,3 +305,82 @@ func _cell(text: String, w: int, col: Color = Color(0.82, 0.82, 0.82)) -> Label:
 	lbl.add_theme_font_size_override("font_size", 11)
 	lbl.add_theme_color_override("font_color", col)
 	return lbl
+
+
+func _show_biz_detail(meta: Dictionary) -> void:
+	if _detail_panel == null:
+		return
+	_detail_title.text = "◀  " + meta.get("biz_name", "Building")
+	for ch: Node in _detail_body.get_children():
+		_detail_body.remove_child(ch)
+		ch.queue_free()
+
+	# ── Core fields ─────────────────────────────────────────────────
+	var curated: Array = [
+		["Biz Name",   meta.get("biz_name",    "—")],
+		["Type",       meta.get("biz_type",    "—")],
+		["Category",   (meta.get("biz_category", "—") as String).capitalize()],
+		["District",   meta.get("district",    "—")],
+		["Owner",      meta.get("owner_name",  "City")],
+		["Status",     meta.get("status",      "—")],
+		["Operational","Yes" if meta.get("operational", false) else "No"],
+		["Cash",       "$%.2f" % float(meta.get("cash_reserves", 0.0))],
+		["Wages/day",  "$%.2f" % float(meta.get("wages_per_day", 0.0))],
+		["Rent/day",   "$%.2f" % float(meta.get("rent_per_day",  0.0))],
+		["Price",      "$%.0f" % float(meta.get("price",         0.0))],
+		["Sell Price", "$%.0f" % float(meta.get("sell_price",    0.0))],
+		["Staff",      str(int(meta.get("_employee_count", 0))) if meta.has("_employee_count") else "—"],
+		["Tenants",    str(int(meta.get("_tenant_count",   0))) if meta.has("_tenant_count")   else "—"],
+	]
+	for kv: Array in curated:
+		_detail_body.add_child(_detail_row(kv[0], kv[1]))
+
+	# ── Inventory buffers ─────────────────────────────────────────
+	var ibuf: Dictionary = meta.get("input_buffer",  {})
+	var obuf: Dictionary = meta.get("output_buffer", {})
+	if not ibuf.is_empty() or not obuf.is_empty():
+		_detail_body.add_child(HSeparator.new())
+	if not ibuf.is_empty():
+		_detail_body.add_child(_detail_row("Input Buffer",  _buf_str(ibuf)))
+	if not obuf.is_empty():
+		_detail_body.add_child(_detail_row("Output Buffer", _buf_str(obuf)))
+
+	# ── Any extra keys not already shown ───────────────────────────
+	var shown: Array = ["biz_name","biz_type","biz_category","district","owner_name",
+		"status","operational","cash_reserves","wages_per_day","rent_per_day",
+		"price","sell_price","_employee_count","_tenant_count",
+		"input_buffer","output_buffer","_world_pos"]
+	var extras: Array = []
+	for key: String in meta.keys():
+		if key in shown:
+			continue
+		var val: Variant = meta[key]
+		if val is Dictionary or val is Array or val is Vector2:
+			continue
+		extras.append([key, str(val)])
+	if not extras.is_empty():
+		_detail_body.add_child(HSeparator.new())
+		for kv: Array in extras:
+			_detail_body.add_child(_detail_row(kv[0], kv[1]))
+
+	_detail_panel.visible = true
+
+
+func _detail_row(key: String, value: String) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	var k := Label.new()
+	k.text = key
+	k.custom_minimum_size       = Vector2(140, 18)
+	k.size_flags_horizontal     = Control.SIZE_SHRINK_BEGIN
+	k.add_theme_font_size_override("font_size", 11)
+	k.add_theme_color_override("font_color", Color(1.00, 0.85, 0.38))
+	hb.add_child(k)
+	var v := Label.new()
+	v.text = value
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.autowrap_mode         = TextServer.AUTOWRAP_WORD
+	v.add_theme_font_size_override("font_size", 11)
+	v.add_theme_color_override("font_color", C_NORM)
+	hb.add_child(v)
+	return hb

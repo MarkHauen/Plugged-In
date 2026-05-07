@@ -2,7 +2,7 @@ extends CharacterBody2D
 
 class_name NPC
 
-enum Type      { CIVILIAN, POLICE }
+enum Type      { CIVILIAN, POLICE, TOURIST }
 enum MoveState { IDLE, MOVING }
 enum Behaviour { WANDER, GOING_TO_SHOP }
 
@@ -23,12 +23,18 @@ const TYPE_CONFIG := {
 		"sides":  4,
 		"label":  "Police",
 	},
+	Type.TOURIST: {
+		"color":  Color(1.00, 0.82, 0.12, 1.0),  # gold hexagon
+		"radius": 11.0,
+		"sides":  6,
+		"label":  "Tourist",
+	},
 }
 
 # Movement config — arrays indexed by Type (CIVILIAN=0, POLICE=1)
-const SPEEDS:    Array = [85.0,  110.0]   # px / s
-const IDLE_MINS: Array = [5.0,   1.0  ]   # seconds min idle
-const IDLE_MAXS: Array = [14.0,  4.0  ]   # seconds max idle
+const SPEEDS:    Array = [85.0,  110.0,  68.0]   # px/s — TOURIST wanders slowly
+const IDLE_MINS: Array = [5.0,   1.0,    4.0 ]   # seconds min idle
+const IDLE_MAXS: Array = [14.0,  4.0,    12.0]   # seconds max idle
 const ARRIVE_DIST := 28.0
 
 # 80% chance a civilian picks from their local (home-district) wander pool
@@ -62,6 +68,12 @@ const STRUGGLING_TINT  := Color(0.90, 0.55, 0.20, 1.0)  # amber — low balance
 const NORMAL_TINT      := Color(1.0,  1.0,  1.0,  1.0)  # reset tint
 var _is_struggling: bool = false   # true when balance < 0; affects shopping
 var _body_poly: Polygon2D = null   # set in _build_visual for tint updates
+
+# ── Employment & housing ─────────────────────────────────────────────────────
+var tourist_budget:  float = 0.0   # lump-sum spending budget for tourists
+var days_unemployed: int   = 0     # consecutive days with no employer
+var days_unhoused:   int   = 0     # consecutive days with no home
+var days_in_city:    int   = 0     # tourists only: days since arrival
 var _move_state:      MoveState  = MoveState.IDLE
 var _path:            Array      = []
 var _path_idx:        int        = 0
@@ -181,9 +193,14 @@ func _arrive() -> void:
 		if not _is_struggling and randf() < _shop_chance:
 			_try_go_shopping()
 			return
-	if npc_type == Type.CIVILIAN and _is_struggling and hunger >= HUNGER_THRESHOLD:
-		_try_go_shopping_for_food()
-		return
+		if _is_struggling and hunger >= HUNGER_THRESHOLD:
+			_try_go_shopping_for_food()
+			return
+	elif npc_type == Type.TOURIST:
+		# Tourists always try to spend — no hunger, no struggling gate
+		if randf() < _shop_chance:
+			_try_go_shopping()
+			return
 	_idle_timer = randf_range(IDLE_MINS[npc_type], IDLE_MAXS[npc_type])
 
 

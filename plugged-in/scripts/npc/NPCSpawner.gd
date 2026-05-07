@@ -81,14 +81,12 @@ func spawn_highway_patrols() -> void:
 		_npc_init_queue.append({"npc": npc, "pos": Vector2(cx, cy)})
 
 
-## Build pathfinding data and apply economic values to every queued NPC.
-## Must be called after all districts and buildings are generated.
-func init_npc_movement(road_graph: Object, all_bldg_metas: Array) -> void:
+## Build pathfinding data for every queued NPC, then clear the queue.
+## Call again after spawn_tourists() to initialise newly added tourists.
+func init_npc_movement(road_graph: Object) -> void:
 	var graph_nodes: Array = road_graph.nodes
 	if graph_nodes.is_empty():
 		return
-
-	var homes_by_district: Dictionary = _build_homes_index(all_bldg_metas)
 
 	for entry: Dictionary in _npc_init_queue:
 		var npc:  NPC     = entry["npc"]
@@ -132,34 +130,28 @@ func init_npc_movement(road_graph: Object, all_bldg_metas: Array) -> void:
 
 		npc.init_pathfinding(road_graph, local_pts, roam_pts, _storefront_registry)
 
-		if npc.npc_type == NPC.Type.CIVILIAN and npc.district_id >= 0:
-			_apply_npc_economy(npc, homes_by_district)
+	_npc_init_queue.clear()
 
 
-## Build a district-id → [residential_meta, …] index from building metadata.
-func _build_homes_index(all_bldg_metas: Array) -> Dictionary:
-	var dist_name_to_id: Dictionary = {}
-	for _d: Dictionary in WorldData.DISTRICTS:
-		dist_name_to_id[_d["name"]] = _d["id"]
-	var homes_by_district: Dictionary = {}
-	for bmeta: Dictionary in all_bldg_metas:
-		if bmeta.get("property_type", "") == "Residential":
-			var did: int = dist_name_to_id.get(bmeta.get("district", ""), -1)
-			if did >= 0:
-				if not homes_by_district.has(did):
-					homes_by_district[did] = []
-				(homes_by_district[did] as Array).append(bmeta)
-	return homes_by_district
+## Tourist districts: Tourist Strip (3), Market District (7), Beachfront (8).
+const TOURIST_DISTRICT_IDS: Array = [3, 7, 8]
 
-
-func _apply_npc_economy(npc: NPC, homes_by_district: Dictionary) -> void:
-	var d_id: int        = npc.district_id
-	var ecfg: Dictionary = WorldData.DISTRICT_BLDG_CONFIG[d_id] if d_id < WorldData.DISTRICT_BLDG_CONFIG.size() else {}
-	var inc_lo: float    = float(ecfg.get("income_lo", 40))
-	var inc_hi: float    = float(ecfg.get("income_hi", 200))
-	npc.daily_wage = randf_range(inc_lo * 0.025, inc_hi * 0.040)
-	npc.daily_rent = npc.daily_wage * randf_range(0.30, 0.50)
-	npc.balance    = npc.daily_wage * randf_range(1.5, 4.0)
-	var h_list: Array = homes_by_district.get(d_id, [])
-	if not h_list.is_empty():
-		npc.home_meta = h_list[randi() % h_list.size()]
+## Spawn a batch of tourists into tourist-friendly districts.
+## Call init_npc_movement() afterward to give them pathfinding data.
+func spawn_tourists(count: int) -> void:
+	for _i: int in range(count):
+		var did: int        = TOURIST_DISTRICT_IDS[randi() % TOURIST_DISTRICT_IDS.size()]
+		var d:   Dictionary = WorldData.DISTRICTS[did]
+		var cx:  float      = float(d["ox"]) + randf_range(0.1, 0.9) * float(d["cols"]) * WorldData.CELL_W
+		var cy:  float      = float(d["oy"]) + randf_range(0.1, 0.9) * float(d["rows"]) * WorldData.CELL_H
+		var npc: NPC        = _npc_scene.instantiate()
+		var pref: Array     = WorldData.DISTRICT_STOREFRONT_ITEMS[did]
+		npc.setup(NPC.Type.TOURIST, "Tourist", did, 0.55, pref)
+		npc.tourist_budget = randf_range(120.0, 500.0)
+		npc.balance        = npc.tourist_budget
+		npc.position       = Vector2(cx, cy)
+		_scene_root.add_child(npc)
+		npc.npc_clicked.connect(_on_npc_clicked)
+		npc.sale_made.connect(_on_sale_made)
+		_all_npcs.append(npc)
+		_npc_init_queue.append({"npc": npc, "pos": Vector2(cx, cy)})

@@ -5,9 +5,10 @@ class_name NPCDataView
 ## Columns: Name | Type | District | Balance | Wage/day | Rent/day | Hunger | State | Behaviour
 
 const HEADERS: Array = [
-	"Name", "Type", "District", "Balance", "Wage/day", "Rent/day", "Hunger", "State", "Behaviour",
+	"Name", "Type", "District", "Balance", "Wage/day", "Rent/day",
+	"Hunger", "State", "Employer", "Home", "Behaviour",
 ]
-const WIDTHS: Array = [170, 108, 135, 82, 80, 80, 70, 112, 155]
+const WIDTHS: Array = [170, 108, 135, 82, 80, 80, 70, 112, 145, 145, 155]
 
 const C_HDR  := Color(0.55, 0.85, 1.00)
 const C_NORM := Color(0.82, 0.82, 0.82)
@@ -22,6 +23,9 @@ var _npcs:      Array         = []
 var _districts: Array         = []
 var _body:      VBoxContainer = null
 var _count_lbl: Label         = null
+var _detail_panel: PanelContainer = null
+var _detail_body:  VBoxContainer  = null
+var _detail_title: Label          = null
 
 
 func _ready() -> void:
@@ -108,6 +112,66 @@ func _build_ui() -> void:
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_body)
 
+	# ── Detail panel (right-side overlay) ────────────────────────────────
+	var dp := PanelContainer.new()
+	var dp_sty := StyleBoxFlat.new()
+	dp_sty.bg_color = Color(0.03, 0.05, 0.10, 0.98)
+	dp_sty.border_color = Color(0.50, 1.00, 0.72, 0.6)
+	dp_sty.border_width_left = 2
+	dp_sty.set_corner_radius_all(4)
+	dp.add_theme_stylebox_override("panel", dp_sty)
+	dp.mouse_filter = Control.MOUSE_FILTER_STOP
+	dp.anchor_left   = 1.0
+	dp.anchor_right  = 1.0
+	dp.anchor_top    = 0.0
+	dp.anchor_bottom = 1.0
+	dp.offset_left   = -380.0
+	dp.offset_right  = -18.0
+	dp.offset_top    = 18.0
+	dp.offset_bottom = -18.0
+	dp.visible = false
+	add_child(dp)
+	_detail_panel = dp
+
+	var dmc := MarginContainer.new()
+	dmc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dmc.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	dmc.add_theme_constant_override("margin_top",    10)
+	dmc.add_theme_constant_override("margin_bottom", 10)
+	dmc.add_theme_constant_override("margin_left",   12)
+	dmc.add_theme_constant_override("margin_right",  12)
+	dp.add_child(dmc)
+
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 4)
+	dmc.add_child(dv)
+
+	var dtr := HBoxContainer.new()
+	dv.add_child(dtr)
+
+	_detail_title = Label.new()
+	_detail_title.add_theme_font_size_override("font_size", 13)
+	_detail_title.add_theme_color_override("font_color", Color(0.50, 1.00, 0.72))
+	_detail_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dtr.add_child(_detail_title)
+
+	var dcl := Button.new()
+	dcl.text = "  ✕  "
+	dcl.pressed.connect(func() -> void: _detail_panel.visible = false)
+	dtr.add_child(dcl)
+
+	dv.add_child(HSeparator.new())
+
+	var ds := ScrollContainer.new()
+	ds.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ds.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	dv.add_child(ds)
+
+	_detail_body = VBoxContainer.new()
+	_detail_body.add_theme_constant_override("separation", 3)
+	_detail_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ds.add_child(_detail_body)
+
 
 func _refresh() -> void:
 	if _body == null:
@@ -151,11 +215,17 @@ func _make_row(npc: NPC, idx: int) -> PanelContainer:
 
 	# Type
 	var type_str: String
+	var type_col: Color
 	if npc.npc_type == NPC.Type.POLICE:
 		type_str = "Highway Patrol" if npc.is_highway_police else "Police"
+		type_col = C_DIM
+	elif npc.npc_type == NPC.Type.TOURIST:
+		type_str = "Tourist"
+		type_col = Color(1.00, 0.82, 0.12)
 	else:
 		type_str = "Civilian"
-	row.add_child(_cell(type_str, WIDTHS[1], C_DIM if npc.npc_type == NPC.Type.POLICE else C_NORM))
+		type_col = C_NORM
+	row.add_child(_cell(type_str, WIDTHS[1], type_col))
 
 	# District
 	var d_str: String = "All Districts"
@@ -195,7 +265,40 @@ func _make_row(npc: NPC, idx: int) -> PanelContainer:
 		state_col  = C_DIM
 	row.add_child(_cell(state_str, WIDTHS[7], state_col))
 
-	# Behaviour
+	# Employer (idx 8)
+	var emp_str: String
+	var emp_col: Color
+	if npc.npc_type == NPC.Type.TOURIST:
+		emp_str = "$%.0f budget" % npc.tourist_budget
+		emp_col = Color(1.00, 0.82, 0.12)
+	elif is_civ:
+		if npc.employer_meta.is_empty():
+			emp_str = "Unemployed"
+			emp_col = C_WARN
+		else:
+			emp_str = npc.employer_meta.get("biz_name", "—")
+			emp_col = C_NORM
+	else:
+		emp_str = "—"
+		emp_col = C_DIM
+	row.add_child(_cell(emp_str, WIDTHS[8], emp_col))
+
+	# Home (idx 9)
+	var home_str: String
+	var home_col: Color
+	if is_civ:
+		if npc.home_meta.is_empty():
+			home_str = "Unhoused"
+			home_col = C_WARN
+		else:
+			home_str = npc.home_meta.get("biz_name", "—")
+			home_col = C_NORM
+	else:
+		home_str = "—"
+		home_col = C_DIM
+	row.add_child(_cell(home_str, WIDTHS[9], home_col))
+
+	# Behaviour (idx 10)
 	var beh_str: String = "Patrol"
 	var beh_col: Color  = C_DIM
 	if is_civ:
@@ -205,7 +308,20 @@ func _make_row(npc: NPC, idx: int) -> PanelContainer:
 		else:
 			beh_str = "Wander"
 			beh_col = C_NORM
-	row.add_child(_cell(beh_str, WIDTHS[8], beh_col))
+	elif npc.npc_type == NPC.Type.TOURIST:
+		beh_str = "Touring"
+		beh_col = Color(1.00, 0.82, 0.12)
+	row.add_child(_cell(beh_str, WIDTHS[10], beh_col))
+
+	# Click → drill-down
+	pc.mouse_filter = Control.MOUSE_FILTER_STOP
+	pc.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	pc.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var me := event as InputEventMouseButton
+			if me.pressed and me.button_index == MOUSE_BUTTON_LEFT:
+				_show_npc_detail(npc)
+	)
 
 	return pc
 
@@ -220,3 +336,79 @@ func _cell(text: String, w: int, col: Color = Color(0.82, 0.82, 0.82)) -> Label:
 	lbl.add_theme_font_size_override("font_size", 11)
 	lbl.add_theme_color_override("font_color", col)
 	return lbl
+
+
+func _show_npc_detail(npc: NPC) -> void:
+	if _detail_panel == null:
+		return
+	_detail_title.text = "◀  " + npc.display_name
+	for ch: Node in _detail_body.get_children():
+		_detail_body.remove_child(ch)
+		ch.queue_free()
+
+	var is_civ:     bool = npc.npc_type == NPC.Type.CIVILIAN
+	var is_tourist: bool = npc.npc_type == NPC.Type.TOURIST
+
+	var type_str: String = "Civilian"
+	if npc.npc_type == NPC.Type.POLICE:
+		type_str = "Highway Patrol" if npc.is_highway_police else "Police"
+	elif is_tourist:
+		type_str = "Tourist"
+
+	var d_str: String = "—"
+	if npc.district_id >= 0 and npc.district_id < _districts.size():
+		d_str = _districts[npc.district_id]["name"]
+
+	_detail_body.add_child(_detail_row("Type",     type_str))
+	_detail_body.add_child(_detail_row("District", d_str))
+	_detail_body.add_child(_detail_row("Balance",  "$%.2f" % npc.balance))
+
+	if is_tourist:
+		_detail_body.add_child(_detail_row("Budget",       "$%.2f" % npc.tourist_budget))
+		_detail_body.add_child(_detail_row("Spent",        "$%.2f" % maxf(0.0, npc.tourist_budget - npc.balance)))
+		_detail_body.add_child(_detail_row("Days in City", str(npc.days_in_city)))
+	elif is_civ:
+		_detail_body.add_child(_detail_row("Daily Wage",      "$%.2f" % npc.daily_wage))
+		_detail_body.add_child(_detail_row("Daily Rent",      "$%.2f" % npc.daily_rent))
+		_detail_body.add_child(_detail_row("Hunger",          "%.1f%%" % (npc.hunger * 100.0)))
+		_detail_body.add_child(_detail_row("Struggling",      "Yes" if npc._is_struggling else "No"))
+		_detail_body.add_child(_detail_row("Days Unemployed", str(npc.days_unemployed)))
+		_detail_body.add_child(_detail_row("Days Unhoused",   str(npc.days_unhoused)))
+		_detail_body.add_child(HSeparator.new())
+		var emp_name: String = npc.employer_meta.get("biz_name", "") if not npc.employer_meta.is_empty() else ""
+		_detail_body.add_child(_detail_row("Employer", emp_name if emp_name != "" else "Unemployed"))
+		if not npc.employer_meta.is_empty():
+			_detail_body.add_child(_detail_row("  Type",     npc.employer_meta.get("biz_type",     "—")))
+			_detail_body.add_child(_detail_row("  District", npc.employer_meta.get("district",     "—")))
+			_detail_body.add_child(_detail_row("  Cash",     "$%.0f" % float(npc.employer_meta.get("cash_reserves", 0.0))))
+			_detail_body.add_child(_detail_row("  Open",     "Yes" if npc.employer_meta.get("operational", false) else "No"))
+		_detail_body.add_child(HSeparator.new())
+		var home_name: String = npc.home_meta.get("biz_name", "") if not npc.home_meta.is_empty() else ""
+		_detail_body.add_child(_detail_row("Home", home_name if home_name != "" else "Unhoused"))
+		if not npc.home_meta.is_empty():
+			_detail_body.add_child(_detail_row("  Type",     npc.home_meta.get("biz_type",  "—")))
+			_detail_body.add_child(_detail_row("  District", npc.home_meta.get("district",  "—")))
+			_detail_body.add_child(_detail_row("  Rent/day", "$%.2f" % npc.daily_rent))
+			_detail_body.add_child(_detail_row("  Tenants",  str(npc.home_meta.get("_tenant_count", 0))))
+
+	_detail_panel.visible = true
+
+
+func _detail_row(key: String, value: String) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	var k := Label.new()
+	k.text = key
+	k.custom_minimum_size       = Vector2(140, 18)
+	k.size_flags_horizontal     = Control.SIZE_SHRINK_BEGIN
+	k.add_theme_font_size_override("font_size", 11)
+	k.add_theme_color_override("font_color", Color(0.55, 0.75, 1.00))
+	hb.add_child(k)
+	var v := Label.new()
+	v.text = value
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.autowrap_mode         = TextServer.AUTOWRAP_WORD
+	v.add_theme_font_size_override("font_size", 11)
+	v.add_theme_color_override("font_color", C_NORM)
+	hb.add_child(v)
+	return hb

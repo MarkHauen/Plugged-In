@@ -16,12 +16,15 @@ class_name EconomyTicker
 var _all_bldg_metas: Array   # shared ref from City
 var _all_npcs:       Array   # shared ref from City
 var _landowners:     Array   # shared ref from City
+var _job_market:     JobMarket
 
 
-func _init(all_bldg_metas: Array, all_npcs: Array, landowners: Array) -> void:
+func _init(all_bldg_metas: Array, all_npcs: Array, landowners: Array,
+		   job_market: JobMarket) -> void:
 	_all_bldg_metas = all_bldg_metas
 	_all_npcs       = all_npcs
 	_landowners     = landowners
+	_job_market     = job_market
 
 
 ## Called on EconomyManager.day_started signal.
@@ -39,21 +42,26 @@ func on_economy_phase_changed(phase: int) -> void:
 
 
 # =============================================================================
-#  DAWN — pay wages; buildings in deep debt are suspended
+#  DAWN — wages flow from employer cash reserves into each NPC's balance.
+#         If an employer can't pay it goes operational=false (suspended).
 # =============================================================================
 func _tick_dawn() -> void:
-	for meta: Dictionary in _all_bldg_metas:
-		if not meta.get("operational", false):
-			continue
-		var wages: float = float(meta.get("wages_per_day", 0.0))
-		if wages <= 0.0:
-			continue
-		meta["cash_reserves"] = float(meta.get("cash_reserves", 0.0)) - wages
-		if float(meta.get("cash_reserves", 0.0)) < -float(meta.get("price", 1000)) * 0.10:
-			meta["operational"] = false
 	for npc_node: NPC in _all_npcs:
-		if is_instance_valid(npc_node):
-			(npc_node as NPC).receive_wage()
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.CIVILIAN or npc.daily_wage <= 0.0:
+			continue
+		# Deduct from employer reserves
+		if not npc.employer_meta.is_empty() and npc.employer_meta.get("operational", false):
+			npc.employer_meta["cash_reserves"] = \
+					float(npc.employer_meta.get("cash_reserves", 0.0)) - npc.daily_wage
+			# Suspend employer if deeply in debt
+			if float(npc.employer_meta.get("cash_reserves", 0.0)) \
+					< -float(npc.employer_meta.get("price", 1000.0)) * 0.10:
+				npc.employer_meta["operational"] = false
+		# Credit NPC
+		npc.receive_wage()
 
 
 # =============================================================================
@@ -126,6 +134,22 @@ func _tick_night() -> void:
 		if is_instance_valid(npc_node):
 			(npc_node as NPC).pay_rent()
 			(npc_node as NPC).tick_hunger()
+	# Remove tourists who have spent their budget or stayed long enough
+	var i: int = _all_npcs.size() - 1
+	while i >= 0:
+		var node: Object = _all_npcs[i]
+		if not is_instance_valid(node as Object):
+			_all_npcs.remove_at(i)
+		else:
+			var npc := node as NPC
+			if npc.npc_type == NPC.Type.TOURIST:
+				npc.days_in_city += 1
+				if npc.balance <= 10.0 or npc.days_in_city >= 5:
+					npc.queue_free()
+					_all_npcs.remove_at(i)
+		i -= 1
+	# Nightly job and housing market
+	_job_market.run_night_tick()
 
 
 # =============================================================================

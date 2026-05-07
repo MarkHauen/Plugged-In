@@ -14,6 +14,7 @@ const DistrictGeneratorScript := preload("res://scripts/world/DistrictGenerator.
 const LandownerSystemScript := preload("res://scripts/world/LandownerSystem.gd")
 const NPCSpawnerScript := preload("res://scripts/npc/NPCSpawner.gd")
 const EconomyTickerScript := preload("res://scripts/economy/EconomyTicker.gd")
+const JobMarketScript := preload("res://scripts/economy/JobMarket.gd")
 const DebugOverlayScript := preload("res://scripts/ui/DebugOverlay.gd")
 
 
@@ -31,6 +32,7 @@ var _landowner_system: LandownerSystem
 var _district_generator: DistrictGenerator
 var _npc_spawner: NPCSpawner
 var _economy_ticker: EconomyTicker
+var _job_market: JobMarket
 var _debug_overlay: DebugOverlay
 var _npc_view: NPCDataView = null
 var _econ_view: EconDataView = null
@@ -93,7 +95,7 @@ func _ready() -> void:
 
 	# NPC init
 	_npc_spawner.spawn_highway_patrols()
-	_npc_spawner.init_npc_movement(_road_graph, _all_bldg_metas)
+	_npc_spawner.init_npc_movement(_road_graph)
 
 	# Data views
 	_npc_view = NPCDataViewScript.new()
@@ -113,12 +115,19 @@ func _ready() -> void:
 	_debug_layer.visible = _debug_overlay.debug_mode
 
 	# Economy ticker
+	_job_market = JobMarketScript.new(_all_bldg_metas, _all_npcs)
+	_job_market.assign_initial_jobs()
+	_job_market.assign_initial_homes()
+
 	_economy_ticker = EconomyTickerScript.new(
-	_all_bldg_metas, _all_npcs, _landowner_system.landowners)
+	_all_bldg_metas, _all_npcs, _landowner_system.landowners, _job_market)
 	EconomyManager.phase_changed.connect(_economy_ticker.on_economy_phase_changed)
 	EconomyManager.day_started.connect(_economy_ticker.on_economy_day_started)
-	EconomyManager.day_started.connect(
-	func(_d: int) -> void: _landowner_system.reset_daily_income())
+	EconomyManager.day_started.connect(_on_day_started)
+
+	# Initial tourist batch
+	_npc_spawner.spawn_tourists(randi() % 4 + 3)
+	_npc_spawner.init_npc_movement(_road_graph)
 
 	$Player.z_index = 10
 
@@ -158,6 +167,12 @@ func _on_npc_clicked(npc: NPC) -> void:
 
 func _on_npc_sale_made(item_name: String, amount: int, _shop_pos: Vector2) -> void:
 	print("[SALE] %s -- $%d" % [item_name, amount])
+
+
+func _on_day_started(_day: int) -> void:
+	_landowner_system.reset_daily_income()
+	_npc_spawner.spawn_tourists(randi() % 4 + 2)
+	_npc_spawner.init_npc_movement(_road_graph)
 
 
 func _setup_camera() -> void:
