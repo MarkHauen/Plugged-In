@@ -16,8 +16,9 @@ static func draw_water(parent: Node) -> void:
 		Vector2(0.0, 0.0), Vector2(WorldData.MAP_W, 0.0),
 		Vector2(WorldData.MAP_W, WorldData.MAP_H), Vector2(0.0, WorldData.MAP_H),
 	])
-	poly.color   = WorldData.WATER_COLOR
-	poly.z_index = -4
+	poly.color    = WorldData.WATER_COLOR
+	poly.z_index  = -4
+	poly.material = _make_water_material()
 	parent.add_child(poly)
 
 
@@ -25,8 +26,9 @@ static func draw_water(parent: Node) -> void:
 static func draw_island(parent: Node) -> void:
 	var poly := Polygon2D.new()
 	poly.polygon = WorldData.ISLAND_POLY
-	poly.color   = WorldData.ISLAND_BASE
-	poly.z_index = -3
+	poly.color    = WorldData.ISLAND_BASE
+	poly.z_index  = -3
+	poly.material = _make_grass_material()
 	parent.add_child(poly)
 
 
@@ -126,6 +128,64 @@ static func build_island_boundary(parent: Node) -> void:
 		var col := CollisionShape2D.new()
 		col.shape = shape
 		body.add_child(col)
+
+
+# ── Shader material factories ────────────────────────────────────────────────
+
+## Animated ripple effect for the ocean surface.
+## World-space coordinates are passed via a varying so the pattern is stable
+## as the camera moves; TIME drives the wave animation.
+static func _make_water_material() -> ShaderMaterial:
+	var s := Shader.new()
+	s.code = """shader_type canvas_item;
+varying vec2 world_pos;
+
+void vertex() {
+	world_pos = VERTEX;
+}
+
+void fragment() {
+	vec2  p = world_pos * 0.00045;
+	float t = TIME * 0.35;
+	float w = sin(p.x * 7.0 + t)                    * 0.50
+	        + sin(p.x * 4.3 - t * 0.80 + p.y * 2.5) * 0.30
+	        + sin(p.y * 5.5 + t * 1.10)              * 0.20;
+	w = w * 0.5 + 0.5;
+	vec4 deep    = vec4(0.06, 0.16, 0.42, 1.0);
+	vec4 shallow = vec4(0.15, 0.31, 0.58, 1.0);
+	vec4 sparkle = vec4(0.62, 0.84, 0.97, 1.0);
+	vec4 base  = mix(deep, shallow, w);
+	float spark = smoothstep(0.84, 1.0, w);
+	COLOR = mix(base, sparkle, spark * 0.45);
+}"""
+	var m := ShaderMaterial.new()
+	m.shader = s
+	return m
+
+
+## Subtle multi-tone variation for the island grass.
+## Uses layered sine harmonics in world space so patches stay fixed.
+static func _make_grass_material() -> ShaderMaterial:
+	var s := Shader.new()
+	s.code = """shader_type canvas_item;
+varying vec2 world_pos;
+
+void vertex() {
+	world_pos = VERTEX;
+}
+
+void fragment() {
+	vec2  p = world_pos * 0.004;
+	float n = sin(p.x * 5.3 + p.y * 3.7) * 0.50 + 0.50;
+	n += (sin(p.x * 11.9 - p.y * 8.1)    * 0.50 + 0.50) * 0.45;
+	n /= 1.45;
+	vec4 dark  = vec4(0.27, 0.39, 0.19, 1.0);
+	vec4 light = vec4(0.47, 0.59, 0.35, 1.0);
+	COLOR = mix(dark, light, n);
+}"""
+	var m := ShaderMaterial.new()
+	m.shader = s
+	return m
 
 
 ## Shared helper — creates a Polygon2D rectangle at world position (x, y) with

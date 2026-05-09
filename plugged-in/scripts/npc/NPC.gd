@@ -62,11 +62,11 @@ var daily_rent:     float      = 0.0     # paid each NIGHT tick
 var employer_meta:  Dictionary = {}      # building meta of NPC's employer
 var home_meta:      Dictionary = {}      # building meta of NPC's home
 var hunger:         float      = 0.0     # 0–1; triggers food trip when > 0.7
-const HUNGER_RATE      := 0.30   # hunger added per NIGHT tick
+const HUNGER_RATE      := 0.10   # hunger added per NIGHT tick (fills in ~10 days without food)
 const HUNGER_THRESHOLD := 0.70   # above this → seek food before wants
 const STRUGGLING_TINT  := Color(0.90, 0.55, 0.20, 1.0)  # amber — low balance
 const NORMAL_TINT      := Color(1.0,  1.0,  1.0,  1.0)  # reset tint
-var _is_struggling: bool = false   # true when balance < 0; affects shopping
+var _is_struggling: bool = false   # true when balance < rent; affects shopping
 var _body_poly: Polygon2D = null   # set in _build_visual for tint updates
 
 # ── Employment & housing ─────────────────────────────────────────────────────
@@ -277,24 +277,45 @@ func _try_go_shopping() -> void:
 
 
 ## Attempt a purchase at the building we navigated to.
-## A sale only executes when the shop is player-owned and the employee has stock.
+## Any non-residential building can sell from its output_buffer.
+## Money always flows: buyer balance → shop cash_reserves.
 func _execute_purchase() -> void:
-	if _shop_meta.get("storefront", false) \
-			and _shop_meta.get("status", "") == "player_owned" \
-			and _shop_meta.get("sells_item_id", -1) == _shop_item:
+	# Use the designated sell_price if set (retail storefronts); otherwise base price.
+	var price: int = _shop_meta.get("sell_price", ItemDB.get_base_price(_shop_item))
+	var sold: bool = false
+
+	if _shop_meta.get("status", "") == "player_owned":
+		# ── Player-owned: deduct from employee's Inventory ────────────
 		var emp: Variant = _shop_meta.get("_employee", null)
 		if emp != null and is_instance_valid(emp):
 			var inv: Variant = emp.inventory
 			if inv != null and (inv as Object).count(_shop_item) > 0:
-				var price: int = _shop_meta.get("sell_price", ItemDB.get_base_price(_shop_item))
 				(inv as Object).remove(_shop_item, 1)
 				emp.cash += float(price)
-				balance  -= float(price)
-				sale_made.emit(ItemDB.get_item_name(_shop_item), price, _shop_pos)
-				# Eating food reduces hunger
-				if _shop_item in [0, 1, 2, 3]:   # COFFEE, STREET_FOOD, BEER, ICE_CREAM
-					hunger = maxf(0.0, hunger - 0.50)
-				_update_struggling_tint()
+				sold = true
+	else:
+		# ── NPC-owned: deduct from the building's production output_buffer ──
+		# output_buffer is filled by _try_produce() each NOON tick via the
+		# supply chain (harbor → market board → input_buffer → production).
+		var obuf := _shop_meta.get("output_buffer", {}) as Dictionary
+		var available: int = int(obuf.get(_shop_item, 0))
+		if available > 0:
+			if available <= 1:
+				obuf.erase(_shop_item)
+			else:
+				obuf[_shop_item] = available - 1
+			_shop_meta["cash_reserves"] = \
+					float(_shop_meta.get("cash_reserves", 0.0)) + float(price)
+			sold = true
+
+	if sold:
+		balance -= float(price)
+		sale_made.emit(ItemDB.get_item_name(_shop_item), price, _shop_pos)
+		# Eating food fully satisfies hunger
+		if _shop_item in [0, 1, 2, 3]:   # COFFEE, STREET_FOOD, BEER, ICE_CREAM
+			hunger = 0.0
+		_update_struggling_tint()
+
 	# Always return to wandering after the attempt
 	_shop_item = -1
 	_shop_meta = {}
@@ -313,7 +334,7 @@ func _update_label() -> void:
 
 
 func _update_struggling_tint() -> void:
-	var struggling_now: bool = balance < 0.0
+	var struggling_now: bool = balance < daily_rent
 	if struggling_now == _is_struggling:
 		return
 	_is_struggling = struggling_now
@@ -333,13 +354,17 @@ func receive_wage() -> void:
 
 
 ## NIGHT: NPC pays rent to their home building's landowner.
-## If they can't afford it, balance goes negative and they become struggling.
+## If they can't afford it the payment is skipped — no magic debt.
 func pay_rent() -> void:
 	if daily_rent <= 0.0:
 		return
+	if balance < daily_rent:
+		# Can't afford rent — mark struggling but don't go negative.
+		_is_struggling = true
+		_update_struggling_tint()
+		return
 	balance -= daily_rent
 	if not home_meta.is_empty():
-		# Forward rent to the building so it can be collected by the landlord
 		home_meta["cash_reserves"] = float(home_meta.get("cash_reserves", 0.0)) + daily_rent
 	_update_struggling_tint()
 

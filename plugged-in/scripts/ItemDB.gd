@@ -36,45 +36,47 @@ enum ID {
 	RAW_MATERIAL,           # 24
 	FINANCIAL_SERVICE,      # 25
 	LEGAL_SERVICE,          # 26
+	PROPERTY_MANAGEMENT,    # 27
 }
 
 ## item_id (ItemDB.ID) → { "name": String, "base_price": int }
 const CATALOG: Dictionary = {
 	# Food & Drink
-	ID.COFFEE:       { "name": "Coffee",       "base_price": 5   },
-	ID.STREET_FOOD:  { "name": "Street Food",  "base_price": 3   },
-	ID.BEER:         { "name": "Beer",         "base_price": 8   },
-	ID.ICE_CREAM:    { "name": "Ice Cream",    "base_price": 4   },
-	ID.SPICES:       { "name": "Spices",       "base_price": 7   },
+	ID.COFFEE:       { "name": "Coffee",       "base_price": 10  },
+	ID.STREET_FOOD:  { "name": "Street Food",  "base_price": 10  },
+	ID.BEER:         { "name": "Beer",         "base_price": 18  },
+	ID.ICE_CREAM:    { "name": "Ice Cream",    "base_price": 8   },
+	ID.SPICES:       { "name": "Spices",       "base_price": 14  },
 	# Electronics
-	ID.USB_CABLE:    { "name": "USB Cable",    "base_price": 12  },
-	ID.PHONE_CASE:   { "name": "Phone Case",   "base_price": 18  },
-	ID.CHARGER:      { "name": "Charger",      "base_price": 22  },
-	ID.HEADPHONES:   { "name": "Headphones",   "base_price": 35  },
-	ID.SIM_CARD:     { "name": "SIM Card",     "base_price": 15  },
+	ID.USB_CABLE:    { "name": "USB Cable",    "base_price": 15  },
+	ID.PHONE_CASE:   { "name": "Phone Case",   "base_price": 22  },
+	ID.CHARGER:      { "name": "Charger",      "base_price": 28  },
+	ID.HEADPHONES:   { "name": "Headphones",   "base_price": 45  },
+	ID.SIM_CARD:     { "name": "SIM Card",     "base_price": 20  },
 	ID.LAPTOP:       { "name": "Laptop",       "base_price": 350 },
-	ID.CAMERA:       { "name": "Camera",       "base_price": 120 },
+	ID.CAMERA:       { "name": "Camera",       "base_price": 140 },
 	# Clothing & Accessories
-	ID.SUNGLASSES:   { "name": "Sunglasses",   "base_price": 25  },
-	ID.STREETWEAR:   { "name": "Streetwear",   "base_price": 40  },
-	ID.DESIGNER_BAG: { "name": "Designer Bag", "base_price": 180 },
+	ID.SUNGLASSES:   { "name": "Sunglasses",   "base_price": 30  },
+	ID.STREETWEAR:   { "name": "Streetwear",   "base_price": 50  },
+	ID.DESIGNER_BAG: { "name": "Designer Bag", "base_price": 200 },
 	# Hardware & Industrial
-	ID.TOOLS:        { "name": "Tools",        "base_price": 28  },
-	ID.SCRAP_METAL:  { "name": "Scrap Metal",  "base_price": 6   },
+	ID.TOOLS:        { "name": "Tools",        "base_price": 35  },
+	ID.SCRAP_METAL:  { "name": "Scrap Metal",  "base_price": 8   },
 	# Collectibles & Media
-	ID.SOUVENIR:     { "name": "Souvenir",     "base_price": 12  },
-	ID.BOOK:         { "name": "Book",         "base_price": 15  },
-	ID.ANTIQUE:      { "name": "Antique",      "base_price": 90  },
+	ID.SOUVENIR:     { "name": "Souvenir",     "base_price": 20  },
+	ID.BOOK:         { "name": "Book",         "base_price": 18  },
+	ID.ANTIQUE:      { "name": "Antique",      "base_price": 110 },
 	# Gray Market
-	ID.FAKE_ID:      { "name": "Fake ID",      "base_price": 60  },
+	ID.FAKE_ID:      { "name": "Fake ID",      "base_price": 75  },
 	# Perishables
-	ID.FLOWER:       { "name": "Flower",       "base_price": 18  },
+	ID.FLOWER:       { "name": "Flower",       "base_price": 22  },
 	# Intermediate Goods — B2B only; never sold at retail storefronts
-	ID.FOOD_INGREDIENT:        { "name": "Food Ingredient",        "base_price": 2,  "intermediate": true },
-	ID.ELECTRONICS_COMPONENT:  { "name": "Electronics Component",  "base_price": 8,  "intermediate": true },
-	ID.RAW_MATERIAL:           { "name": "Raw Material",           "base_price": 3,  "intermediate": true },
+	ID.FOOD_INGREDIENT:        { "name": "Food Ingredient",        "base_price": 5,  "intermediate": true },
+	ID.ELECTRONICS_COMPONENT:  { "name": "Electronics Component",  "base_price": 12, "intermediate": true },
+	ID.RAW_MATERIAL:           { "name": "Raw Material",           "base_price": 6,  "intermediate": true },
 	ID.FINANCIAL_SERVICE:      { "name": "Financial Service",      "base_price": 50, "intermediate": true },
 	ID.LEGAL_SERVICE:          { "name": "Legal Service",          "base_price": 75, "intermediate": true },
+	ID.PROPERTY_MANAGEMENT:    { "name": "Property Mgmt",          "base_price": 40, "intermediate": true },
 }
 
 

@@ -26,29 +26,30 @@ extends Node
 ## Populated in _ready() using ItemDB.ID values.
 var RECIPES: Dictionary = {}
 
-## Daily wage per employee by band (applied once per DAWN tick).
-const WAGE_BANDS: Dictionary = {
-	"low":  80.0,
-	"mid":  120.0,
-	"high": 200.0,
-}
+## Fraction of a building's per-cycle revenue that becomes the total wage bill.
+## e.g. a Bakery earning $60/cycle pays $21/cycle in wages at 0.35 share.
+const WAGE_SHARE: float = 0.35
+
+## Minimum daily wage per employee, regardless of how little revenue the
+## building earns.  Keeps pure-service / government buildings viable.
+const WAGE_FLOOR: float = 5.0
 
 ## Fraction of a building's declared daily income paid as rent (per NIGHT tick).
 const RENT_RATIOS: Dictionary = {
-	"residential":   0.85,
-	"production":    0.20,
-	"industrial":    0.18,
-	"retail":        0.28,
-	"hospitality":   0.25,
-	"financial":     0.15,
-	"legal":         0.18,
-	"tech":          0.15,
-	"entertainment": 0.22,
-	"government":    0.05,
-	"commercial":    0.25,
-	"import":        0.20,
-	"storage":       0.15,
-	"office":        0.18,
+	"residential":   0.020,
+	"production":    0.025,
+	"industrial":    0.020,
+	"retail":        0.030,
+	"hospitality":   0.025,
+	"financial":     0.015,
+	"legal":         0.020,
+	"tech":          0.015,
+	"entertainment": 0.025,
+	"government":    0.005,
+	"commercial":    0.025,
+	"import":        0.025,
+	"storage":       0.015,
+	"office":        0.020,
 }
 
 
@@ -60,12 +61,15 @@ func _build_recipes() -> void:
 	var I := ItemDB.ID
 	RECIPES = {
 		# ── Residential ──────────────────────────────────────────────────────
-		"House":              _r({}, {},                                            0,  [], "residential", "low"),
-		"Cottage":            _r({}, {},                                            0,  [], "residential", "low"),
-		"Bungalow":           _r({}, {},                                            0,  [], "residential", "low"),
-		"Flat":               _r({}, {},                                            0,  [], "residential", "low"),
-		"Tenement":           _r({}, {},                                            0,  [], "residential", "low"),
-		"Manor House":        _r({}, {},                                            1,  [], "residential", "mid"),
+		# Residential buildings consume PROPERTY_MANAGEMENT each cycle.
+		# If none is available (no Estate Agency operational), the building
+		# is gated by _check_property_management() in EconomyTicker.
+		"House":              _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+		"Cottage":            _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+		"Bungalow":           _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+		"Flat":               _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+		"Tenement":           _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+		"Manor House":        _r({I.PROPERTY_MANAGEMENT: 1}, {},                                1,  [], "residential", "mid"),
 
 		# ── Food Production ───────────────────────────────────────────────────
 		"Bakery":             _r({I.FOOD_INGREDIENT: 4},    {I.STREET_FOOD: 6},               2, ["Bank"],          "production",  "low"),
@@ -110,7 +114,10 @@ func _build_recipes() -> void:
 		# ── Legal ─────────────────────────────────────────────────────────────
 		"Law Firm":           _r({},                        {I.LEGAL_SERVICE: 8},            4, ["Bank"],          "legal",       "high"),
 		"Guild Hall":         _r({},                        {I.LEGAL_SERVICE: 3},            2, [],                "legal",       "mid"),
-
+		# ── Property Management ───────────────────────────────────────────────
+		# Estate Agencies employ staff to manage properties, producing
+		# PROPERTY_MANAGEMENT tokens consumed by all residential buildings.
+		"Estate Agency":      _r({I.LEGAL_SERVICE: 1},      {I.PROPERTY_MANAGEMENT: 8},      4, ["Bank"],          "legal",       "mid"),
 		# ── Retail ────────────────────────────────────────────────────────────
 		"Corner Shop":        _r({I.FOOD_INGREDIENT: 2},    {I.COFFEE: 3, I.USB_CABLE: 2},   1, [],                "retail",      "low"),
 		"Corner Store":       _r({I.FOOD_INGREDIENT: 2},    {I.COFFEE: 3, I.STREET_FOOD: 2}, 1, [],                "retail",      "low"),
@@ -121,12 +128,13 @@ func _build_recipes() -> void:
 		"Bookshop":           _r({I.RAW_MATERIAL: 1},       {I.BOOK: 4},                     1, [],                "retail",      "low"),
 		"Textile Shop":       _r({I.RAW_MATERIAL: 2},       {I.STREETWEAR: 3},               2, [],                "retail",      "low"),
 		"Electronics Bazaar": _r({I.ELECTRONICS_COMPONENT: 3},
-		                         {I.USB_CABLE: 4, I.CHARGER: 3, I.PHONE_CASE: 2},           2, [],                "retail",      "low"),
+		                         {I.USB_CABLE: 4, I.CHARGER: 3, I.PHONE_CASE: 2, I.SIM_CARD: 2, I.HEADPHONES: 1},
+		                                                                                      2, [],                "retail",      "low"),
 		"Jewellers":          _r({I.RAW_MATERIAL: 1},       {I.ANTIQUE: 2},                  2, ["Bank"],          "retail",      "mid"),
 		"Import Store":       _r({I.FOOD_INGREDIENT: 1, I.ELECTRONICS_COMPONENT: 1, I.RAW_MATERIAL: 1},
 		                         {I.SPICES: 2, I.USB_CABLE: 2, I.TOOLS: 1},                 2, ["Bank"],          "retail",      "mid"),
 		"Surf Shop":          _r({},                        {I.SUNGLASSES: 2, I.STREETWEAR: 2}, 2, [],             "retail",      "low"),
-		"Pawn Shop":          _r({},                        {I.SCRAP_METAL: 2},              1, [],                "retail",      "low"),
+		"Pawn Shop":          _r({},                        {I.SCRAP_METAL: 2, I.FAKE_ID: 1}, 1, [],                "retail",      "low"),
 		"Laundromat":         _r({},                        {},                              1, [],                "commercial",  "low"),
 		"Gallery":            _r({},                        {I.ANTIQUE: 1},                  2, ["Bank"],          "entertainment","mid"),
 
@@ -187,10 +195,17 @@ func get_recipe(biz_type: String) -> Dictionary:
 	return _r({}, {}, 1, [], "commercial", "low")
 
 
-## Total daily wages a building owes its workers (called once meta["biz_type"] is set).
+## Total daily wages a building owes its workers.
+## Computed from the building's expected output revenue × WAGE_SHARE,
+## floored at WAGE_FLOOR × employee_count so every worker earns something.
 func wages_for(meta: Dictionary) -> float:
 	var recipe: Dictionary = get_recipe(meta.get("biz_type", ""))
-	return float(recipe.get("employees", 0)) * WAGE_BANDS.get(recipe.get("wage_band", "low"), 80.0)
+	var employees: int     = max(int(recipe.get("employees", 0)), 1)
+	var outputs: Dictionary = recipe.get("outputs", {}) as Dictionary
+	var revenue: float = 0.0
+	for item_id: int in outputs.keys():
+		revenue += float(int(outputs[item_id])) * float(ItemDB.get_base_price(item_id))
+	return maxf(float(employees) * WAGE_FLOOR, revenue * WAGE_SHARE)
 
 
 ## Daily rent a building owes its landowner (proportional to its declared income).

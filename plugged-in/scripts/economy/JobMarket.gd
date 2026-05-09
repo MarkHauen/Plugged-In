@@ -17,17 +17,30 @@ class_name JobMarket
 
 # How many tenants each residential building type can house.
 const RESIDENTIAL_CAPACITY: Dictionary = {
-	"House":        2,
-	"Cottage":      2,
-	"Bungalow":     2,
-	"Flat":         4,
-	"Tenement":     6,
-	"Manor House":  3,
+	"House":        4,
+	"Cottage":      3,
+	"Bungalow":     4,
+	"Flat":         8,
+	"Tenement":     12,
+	"Manor House":  6,
 }
 
 # Residential biz_types (buildings that provide homes, not jobs).
 const RESIDENTIAL_TYPES: Array = [
 	"House", "Cottage", "Bungalow", "Flat", "Tenement", "Manor House",
+]
+
+# How many tourist guests each hotel type can accommodate.
+const HOTEL_CAPACITY: Dictionary = {
+	"Hotel":         20,
+	"Tourist Hotel": 30,
+	"Resort":        50,
+	"Inn":           10,
+}
+
+# biz_types that function as tourist accommodation.
+const HOTEL_TYPES: Array = [
+	"Hotel", "Tourist Hotel", "Resort", "Inn",
 ]
 
 # NPCs check for a better job with this probability each night.
@@ -38,6 +51,12 @@ const HOUSING_UPGRADE_CHANCE := 0.08
 const HOUSING_DOWNGRADE_CHANCE := 0.15
 # A new job must pay at least this fraction more to be worth switching for.
 const UPGRADE_WAGE_THRESHOLD := 1.25
+
+# Rent pressure applied each NIGHT to residential buildings.
+const RENT_DEFLATE_VACANT:  float = 0.08   # 8 % drop when completely empty
+const RENT_DEFLATE_PARTIAL: float = 0.02   # 2 % drop when under half capacity
+const RENT_INFLATE_FULL:    float = 0.01   # 1 % rise when every slot is taken
+const RENT_MINIMUM:         float = 1.0    # absolute floor ($1 / day)
 
 var _all_bldg_metas: Array   # shared ref from City
 var _all_npcs:       Array   # shared ref from City
@@ -72,6 +91,29 @@ func assign_initial_homes() -> void:
 		if npc.npc_type != NPC.Type.CIVILIAN:
 			continue
 		_assign_home(npc, homes)
+
+
+## Assign every tourist in _all_npcs to their nearest available hotel.
+## Call this after spawn_tourists() so new arrivals get a room.
+func assign_tourist_hotels() -> void:
+	var hotels: Dictionary = _build_hotels_index()
+	for npc_node in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.TOURIST or not npc.home_meta.is_empty():
+			continue
+		_assign_tourist_hotel(npc, hotels)
+
+
+## Release a tourist's hotel slot (call before culling the tourist).
+func release_tourist_hotel(npc: NPC) -> void:
+	if npc.home_meta.is_empty():
+		return
+	var cur: int = int(npc.home_meta.get("_tenant_count", 0))
+	npc.home_meta["_tenant_count"] = max(0, cur - 1)
+	npc.home_meta  = {}
+	npc.daily_rent = 0.0
 
 
 # =============================================================================
@@ -120,6 +162,22 @@ func run_night_tick() -> void:
 				and randf() < HOUSING_UPGRADE_CHANCE:
 			_try_upgrade_home(npc, homes)
 
+	# ── Tourist hotel market ─────────────────────────────────────────────────
+	var hotels: Dictionary = _build_hotels_index()
+	for npc_node in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.TOURIST:
+			continue
+		if not npc.home_meta.is_empty():
+			if npc.home_meta.get("status", "") == "abandoned":
+				release_tourist_hotel(npc)
+		if npc.home_meta.is_empty():
+			_assign_tourist_hotel(npc, hotels)
+
+	_tick_rent_pressure()
+
 
 # =============================================================================
 #  Index builders
@@ -165,6 +223,24 @@ func _build_homes_index() -> Dictionary:
 	return result
 
 
+## Returns: district_id → [hotel building metas with remaining guest capacity]
+func _build_hotels_index() -> Dictionary:
+	var result: Dictionary = {}
+	for meta: Dictionary in _all_bldg_metas:
+		if meta.get("property_type", "") != "Hotel":
+			continue
+		var biz_type: String = meta.get("biz_type", "Hotel")
+		var cap: int = HOTEL_CAPACITY.get(biz_type, 10)
+		var cur: int = int(meta.get("_tenant_count", 0))
+		if cur >= cap:
+			continue
+		var did: int = _district_id_for(meta)
+		if not result.has(did):
+			result[did] = []
+		(result[did] as Array).append(meta)
+	return result
+
+
 ## Resolves the district name on a building meta to its integer ID.
 func _district_id_for(meta: Dictionary) -> int:
 	var dist_name: String = meta.get("district", "")
@@ -180,7 +256,15 @@ func _district_id_for(meta: Dictionary) -> int:
 
 func _assign_job(npc: NPC, employers: Dictionary) -> void:
 	# Search home district first, then city-wide.
-	var candidates: Array = _candidates_for_npc(npc.district_id, employers)
+	# Re-check capacity live: the index is built once per tick so _employee_count
+	# may have advanced since the index snapshot was taken.
+	var raw: Array = _candidates_for_npc(npc.district_id, employers)
+	var candidates: Array = []
+	for meta: Dictionary in raw:
+		var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
+		var cap: int = int(recipe.get("employees", 0))
+		if int(meta.get("_employee_count", 0)) < cap:
+			candidates.append(meta)
 	if candidates.is_empty():
 		return
 	var best: Dictionary = _nearest(candidates, npc.position)
@@ -192,7 +276,9 @@ func _assign_job(npc: NPC, employers: Dictionary) -> void:
 func _assign_job_to(npc: NPC, meta: Dictionary) -> void:
 	npc.employer_meta = meta
 	var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
-	npc.daily_wage = BusinessDB.WAGE_BANDS.get(recipe.get("wage_band", "low"), 80.0)
+	var max_employees: int = max(int(recipe.get("employees", 1)), 1)
+	var wages_total: float = float(meta.get("wages_per_day", BusinessDB.wages_for(meta)))
+	npc.daily_wage = wages_total / float(max_employees)
 	meta["_employee_count"] = int(meta.get("_employee_count", 0)) + 1
 	npc.days_unemployed = 0
 
@@ -210,8 +296,10 @@ func _try_upgrade_job(npc: NPC, employers: Dictionary) -> void:
 	for meta: Dictionary in all_candidates:
 		if meta == npc.employer_meta:
 			continue
-		var recipe:    Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
-		var new_wage:  float = BusinessDB.WAGE_BANDS.get(recipe.get("wage_band", "low"), 80.0)
+		var recipe:        Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
+		var max_employees: int       = max(int(recipe.get("employees", 1)), 1)
+		var wages_total:   float     = float(meta.get("wages_per_day", BusinessDB.wages_for(meta)))
+		var new_wage:      float     = wages_total / float(max_employees)
 		if new_wage >= npc.daily_wage * UPGRADE_WAGE_THRESHOLD:
 			_release_job(npc)
 			_assign_job_to(npc, meta)
@@ -223,7 +311,14 @@ func _try_upgrade_job(npc: NPC, employers: Dictionary) -> void:
 # =============================================================================
 
 func _assign_home(npc: NPC, homes: Dictionary) -> void:
-	var candidates: Array = _candidates_for_npc(npc.district_id, homes)
+	# Re-check capacity live: the index is built once per tick so _tenant_count
+	# may have advanced since the index snapshot was taken.
+	var raw: Array = _candidates_for_npc(npc.district_id, homes)
+	var candidates: Array = []
+	for meta: Dictionary in raw:
+		var cap: int = RESIDENTIAL_CAPACITY.get(meta.get("biz_type", "House"), 2)
+		if int(meta.get("_tenant_count", 0)) < cap:
+			candidates.append(meta)
 	if candidates.is_empty():
 		return
 	var best: Dictionary = _nearest(candidates, npc.position)
@@ -240,6 +335,19 @@ func _assign_home_to(npc: NPC, meta: Dictionary) -> void:
 	npc.daily_rent = float(meta.get("rent_per_day", 8.0)) / float(cap)
 	meta["_tenant_count"] = int(meta.get("_tenant_count", 0)) + 1
 	npc.days_unhoused = 0
+
+
+## Assign a tourist to their nearest available hotel.
+func _assign_tourist_hotel(npc: NPC, hotels: Dictionary) -> void:
+	var candidates: Array = _candidates_for_npc(npc.district_id, hotels)
+	var best: Dictionary = _nearest(candidates, npc.position)
+	if best.is_empty():
+		return
+	npc.home_meta = best
+	var biz_type: String = best.get("biz_type", "Hotel")
+	var cap: int         = max(HOTEL_CAPACITY.get(biz_type, 10), 1)
+	npc.daily_rent       = float(best.get("rent_per_day", 50.0)) / float(cap)
+	best["_tenant_count"] = int(best.get("_tenant_count", 0)) + 1
 
 
 func _release_home(npc: NPC) -> void:
@@ -297,6 +405,42 @@ func _all_candidates(index: Dictionary) -> Array:
 	for key: int in index.keys():
 		result.append_array(index[key] as Array)
 	return result
+
+
+# =============================================================================
+#  RENT PRESSURE — called at the end of every night tick.
+#  Vacant buildings deflate rent so they eventually attract tenants;
+#  full buildings inflate slightly.  All current tenants get their daily_rent
+#  updated to match the building's new rate.
+# =============================================================================
+func _tick_rent_pressure() -> void:
+	for meta: Dictionary in _all_bldg_metas:
+		var prop_type: String = meta.get("property_type", "")
+		if prop_type != "Residential" and prop_type != "Hotel":
+			continue
+		var biz_type: String = meta.get("biz_type", "House")
+		var cap: int = max(
+			RESIDENTIAL_CAPACITY.get(biz_type, HOTEL_CAPACITY.get(biz_type, 2)), 1)
+		var tenants:  int    = int(meta.get("_tenant_count", 0))
+		var rent:     float  = float(meta.get("rent_per_day", 8.0))
+		if tenants == 0:
+			rent = maxf(RENT_MINIMUM, rent * (1.0 - RENT_DEFLATE_VACANT))
+		elif tenants < cap / 2.0:
+			rent = maxf(RENT_MINIMUM, rent * (1.0 - RENT_DEFLATE_PARTIAL))
+		elif tenants >= cap:
+			rent *= (1.0 + RENT_INFLATE_FULL)
+		meta["rent_per_day"] = rent
+	# Propagate the new rent to all current tenants (civilian and tourist).
+	for npc_node in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.home_meta.is_empty():
+			continue
+		var biz_type: String = npc.home_meta.get("biz_type", "House")
+		var cap: int = max(
+			RESIDENTIAL_CAPACITY.get(biz_type, HOTEL_CAPACITY.get(biz_type, 2)), 1)
+		npc.daily_rent = float(npc.home_meta.get("rent_per_day", 8.0)) / float(cap)
 
 
 ## Return the candidate closest to pos; empty dict if array is empty.

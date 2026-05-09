@@ -127,6 +127,7 @@ func _ready() -> void:
 
 	# Initial tourist batch
 	_npc_spawner.spawn_tourists(randi() % 4 + 3)
+	_job_market.assign_tourist_hotels()
 	_npc_spawner.init_npc_movement(_road_graph)
 
 	$Player.z_index = 10
@@ -172,6 +173,7 @@ func _on_npc_sale_made(item_name: String, amount: int, _shop_pos: Vector2) -> vo
 func _on_day_started(_day: int) -> void:
 	_landowner_system.reset_daily_income()
 	_npc_spawner.spawn_tourists(randi() % 4 + 2)
+	_job_market.assign_tourist_hotels()
 	_npc_spawner.init_npc_movement(_road_graph)
 
 

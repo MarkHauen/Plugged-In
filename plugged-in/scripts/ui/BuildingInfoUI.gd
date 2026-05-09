@@ -2,7 +2,7 @@ extends CanvasLayer
 
 const BTC_RATE := 30000.0   # $ per BTC (in-game)
 const ATM_FEE  := 0.01      # 1%
-# Bulk buy discount tiers: index matches _shop_buy_btns [x1, x5, x10]
+# Bulk buy discount tiers for designated storefronts [x1, x5, x10]
 const BULK_QTYS:      Array = [1,    5,    10  ]
 const BULK_DISCOUNTS: Array = [0.0,  0.08, 0.15]  # 0% / 8% / 15% off unit price
 
@@ -22,9 +22,8 @@ var _district_lbl: Label
 var _buy_btn:        Button
 var _squat_btn:      Button
 var _manage_btn:     Button
-var _shop_section:   VBoxContainer = null
-var _shop_item_lbl:  Label         = null
-var _shop_buy_btns:  Array         = []
+var _shop_section:         VBoxContainer = null
+var _shop_items_container: VBoxContainer = null  # cleared and rebuilt each show_building call
 var _atm_section:    VBoxContainer = null
 var _atm_result_lbl: Label         = null
 var _atm_btns:       Array         = []
@@ -143,7 +142,7 @@ func _build_ui() -> void:
 	pad.custom_minimum_size = Vector2(0, 4)
 	vbox.add_child(pad)
 
-	# ── Storefront shop section (hidden by default) ──────────────────────────
+	# ── Available goods section — dynamically populated from output_buffer ─────
 	_shop_section = VBoxContainer.new()
 	_shop_section.add_theme_constant_override("separation", 4)
 	_shop_section.visible = false
@@ -151,20 +150,15 @@ func _build_ui() -> void:
 
 	_shop_section.add_child(HSeparator.new())
 
-	_shop_item_lbl = Label.new()
-	_shop_item_lbl.add_theme_font_size_override("font_size", 12)
-	_shop_item_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72))
-	_shop_section.add_child(_shop_item_lbl)
+	var shop_hdr := Label.new()
+	shop_hdr.text = "  AVAILABLE GOODS"
+	shop_hdr.add_theme_font_size_override("font_size", 11)
+	shop_hdr.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72))
+	_shop_section.add_child(shop_hdr)
 
-	var shop_row := HBoxContainer.new()
-	shop_row.add_theme_constant_override("separation", 4)
-	_shop_section.add_child(shop_row)
-	for j: int in range(3):
-		var b := Button.new()
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.pressed.connect(_on_buy_items_pressed.bind(j))
-		shop_row.add_child(b)
-		_shop_buy_btns.append(b)
+	_shop_items_container = VBoxContainer.new()
+	_shop_items_container.add_theme_constant_override("separation", 3)
+	_shop_section.add_child(_shop_items_container)
 
 	# ── ATM section (hidden by default) ────────────────────────────────────
 	_atm_section = VBoxContainer.new()
@@ -245,9 +239,22 @@ func show_building(meta: Dictionary) -> void:
 		else:
 			_income_lbl.text = "  Daily Income:  —"
 	else:
-		var income: int = meta.get("income", 0)
-		_income_lbl.text = "  Daily Income:  $" + _fmt(income) + " / day"
-		_income_lbl.add_theme_color_override("font_color", Color(0.50, 1.00, 0.60))
+		var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
+		var out_items: Dictionary = recipe.get("outputs", {}) as Dictionary
+		if not out_items.is_empty():
+			var rev: int = 0
+			for iid: int in out_items.keys():
+				rev += int(out_items[iid]) * ItemDB.get_base_price(iid)
+			_income_lbl.text = "  Est. Revenue:  $" + _fmt(rev) + " / cycle"
+			_income_lbl.add_theme_color_override("font_color", Color(0.50, 1.00, 0.60))
+		else:
+			var rent: float = float(meta.get("rent_per_day", 0.0))
+			if rent > 0.0:
+				_income_lbl.text = "  Rent income:  $" + _fmt(int(rent)) + " / day"
+				_income_lbl.add_theme_color_override("font_color", Color(0.50, 1.00, 0.60))
+			else:
+				_income_lbl.text = "  Daily Revenue:  —"
+				_income_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
 
 	# ── Economic details ─────────────────────────────────────────
 	if _econ_section != null:
@@ -301,23 +308,62 @@ func show_building(meta: Dictionary) -> void:
 		_buy_btn.modulate  = Color(1.0, 1.0, 1.0, 1.0) if can_afford else Color(0.5, 0.5, 0.5, 1.0)
 		_buy_btn.visible   = true
 
-	# ── Storefront section ──────────────────────────────────────────────
+	# ── Available goods section ─────────────────────────────────────────────────
+	# Shown for any non-residential building with goods in its output_buffer.
+	# Player-owned shops use the Manage Stock / employee flow instead.
 	if _shop_section != null:
-		if meta.has("storefront") and _player != null and status != "abandoned":
-			_shop_section.visible = true
-			var sf_iname: String = meta.get("sells_item_name", "?")
-			var sf_p:     int    = meta.get("sell_price", 0)
-			_shop_item_lbl.text = "  \U0001F6D2  Sells: " + sf_iname + "  \u2014  $" + str(sf_p) + " each"
-			var cash: float = _player.wallet.get_balance(Wallet.Currency.CASH)
-			for j: int in range(3):
-				var disc:  float = BULK_DISCOUNTS[j]
-				var unit:  int   = int(ceil(float(sf_p) * (1.0 - disc)))
-				var total: int   = unit * BULK_QTYS[j]
-				if disc > 0.0:
-					_shop_buy_btns[j].text = "\u00d7%d  $%d (-%d%%)" % [BULK_QTYS[j], total, int(disc * 100)]
-				else:
-					_shop_buy_btns[j].text = "\u00d7%d  $%d" % [BULK_QTYS[j], total]
-				_shop_buy_btns[j].disabled = cash < float(total)
+		if _player != null and status != "abandoned" and status != "player_owned" \
+				and meta.get("property_type", "") != "Residential":
+			var obuf: Dictionary = meta.get("output_buffer", {}) as Dictionary
+			var available: Dictionary = {}
+			for iid: int in obuf.keys():
+				if int(obuf.get(iid, 0)) > 0:
+					available[iid] = int(obuf[iid])
+			if not available.is_empty():
+				_shop_section.visible = true
+				for child: Node in _shop_items_container.get_children():
+					child.queue_free()
+				var cash:       float = _player.wallet.get_balance(Wallet.Currency.CASH)
+				var sf_item_id: int   = int(meta.get("sells_item_id", -1))
+				var sf_price:   int   = int(meta.get("sell_price",   0))
+				for iid: int in available.keys():
+					var qty_avail:  int    = available[iid]
+					var unit_price: int = sf_price \
+							if (sf_item_id == iid and sf_price > 0) \
+							else ItemDB.get_base_price(iid)
+					var info_row := HBoxContainer.new()
+					_shop_items_container.add_child(info_row)
+					var name_lbl := Label.new()
+					name_lbl.text = "  " + ItemDB.get_item_name(iid) + "  —  $" + str(unit_price)
+					name_lbl.add_theme_font_size_override("font_size", 11)
+					name_lbl.add_theme_color_override("font_color", Color(0.90, 0.90, 0.90))
+					name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+					info_row.add_child(name_lbl)
+					var stock_lbl := Label.new()
+					stock_lbl.text = str(qty_avail) + " left  "
+					stock_lbl.add_theme_font_size_override("font_size", 10)
+					stock_lbl.add_theme_color_override("font_color",
+							Color(0.50, 1.00, 0.60) if qty_avail > 3 else Color(1.00, 0.75, 0.30))
+					info_row.add_child(stock_lbl)
+					# Storefronts get bulk tiers for their primary item; all others get ×1 only.
+					var tiers: Array = BULK_QTYS if sf_item_id == iid else [1]
+					var btn_row := HBoxContainer.new()
+					btn_row.add_theme_constant_override("separation", 3)
+					_shop_items_container.add_child(btn_row)
+					for tier_qty: int in tiers:
+						var disc: float = BULK_DISCOUNTS[BULK_QTYS.find(tier_qty)] \
+											if sf_item_id == iid else 0.0
+						var tier_unit:  int = int(ceil(float(unit_price) * (1.0 - disc)))
+						var tier_total: int = tier_unit * tier_qty
+						var btn := Button.new()
+						btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+						btn.text = ("×%d  $%d (-%d%%)" % [tier_qty, tier_total, int(disc * 100)]) \
+									if disc > 0.0 else ("×%d  $%d" % [tier_qty, tier_total])
+						btn.disabled = cash < float(tier_total) or qty_avail < tier_qty
+						btn.pressed.connect(_on_buy_output_item.bind(iid, tier_qty, tier_unit))
+						btn_row.add_child(btn)
+			else:
+				_shop_section.visible = false
 		else:
 			_shop_section.visible = false
 
@@ -366,17 +412,21 @@ func _on_manage_stock_pressed() -> void:
 	_player.open_transfer(emp_inv, emp_obj, emp_obj.display_name + " — " + _current_meta.get("biz_name", "Shop"))
 
 
-func _on_buy_items_pressed(qty_idx: int) -> void:
+func _on_buy_output_item(item_id: int, qty: int, unit_price: int) -> void:
 	if _player == null or _current_meta.is_empty():
 		return
-	var item_id: int   = _current_meta.get("sells_item_id", 0)
-	var sp:      int   = _current_meta.get("sell_price", 0)
-	var disc:    float = BULK_DISCOUNTS[qty_idx]
-	var qty:     int   = BULK_QTYS[qty_idx]
-	var unit:    int   = int(ceil(float(sp) * (1.0 - disc)))
-	var total:   float = float(unit * qty)
+	var total: float = float(unit_price * qty)
+	var obuf:  Dictionary = _current_meta.get("output_buffer", {}) as Dictionary
+	var stock: int        = int(obuf.get(item_id, 0))
+	if stock < qty:
+		return
 	if not _player.wallet.remove(Wallet.Currency.CASH, total):
 		return
+	if stock - qty <= 0:
+		obuf.erase(item_id)
+	else:
+		obuf[item_id] = stock - qty
+	_current_meta["cash_reserves"] = float(_current_meta.get("cash_reserves", 0.0)) + total
 	_player.inventory.add(item_id, qty)
 	show_building(_current_meta)
 

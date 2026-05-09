@@ -67,29 +67,31 @@ const DISTRICT_STOREFRONT_ITEMS: Array = [
 
 const ATM_DISTRICT_IDS: Array = [5, 6, 8]
 
-# ── Shop facade name for each item ─────────────────────────────────────────
+# ── Business type that produces each retail item (must match BusinessDB.RECIPES) ──
+# These are the biz_type strings stamped onto generated storefront buildings.
+# Each biz_type must exist in BusinessDB so _try_produce() can fill output_buffer.
 const ITEM_SHOP_TYPES: Dictionary = {
-	0:  "Coffee Shop",
-	1:  "Street Food Stall",
-	2:  "Bar",
-	3:  "Ice Cream Parlour",
-	4:  "Spice Shop",
-	5:  "Electronics Store",
-	6:  "Phone Shop",
-	7:  "Hardware Store",
-	8:  "Audio Store",
-	9:  "Phone Shop",
-	10: "Tech Store",
-	11: "Camera Shop",
-	12: "Sunglasses Boutique",
-	13: "Street Fashion",
-	14: "Boutique",
-	15: "Tool Shop",
-	16: "Scrap Dealer",
-	17: "Souvenir Shop",
-	18: "Bookshop",
-	19: "Antique Shop",
-	20: "Copy Shop",
+	0:  "Beachside Cafe",     # COFFEE          — consumes FOOD_INGREDIENT
+	1:  "Street Food",        # STREET_FOOD     — consumes FOOD_INGREDIENT
+	2:  "Bar",                # BEER            — consumes FOOD_INGREDIENT
+	3:  "Ice Cream Parlour",  # ICE_CREAM       — consumes FOOD_INGREDIENT
+	4:  "Spice Shop",         # SPICES          — consumes FOOD_INGREDIENT
+	5:  "Electronics Bazaar", # USB_CABLE       — consumes ELECTRONICS_COMPONENT
+	6:  "Electronics Bazaar", # PHONE_CASE      — consumes ELECTRONICS_COMPONENT
+	7:  "Electronics Bazaar", # CHARGER         — consumes ELECTRONICS_COMPONENT
+	8:  "Electronics Bazaar", # HEADPHONES      — consumes ELECTRONICS_COMPONENT
+	9:  "Electronics Bazaar", # SIM_CARD        — consumes ELECTRONICS_COMPONENT
+	10: "Tech Lab",           # LAPTOP          — consumes ELECTRONICS_COMPONENT
+	11: "Tech Lab",           # CAMERA          — consumes ELECTRONICS_COMPONENT
+	12: "Surf Shop",          # SUNGLASSES      — no inputs required
+	13: "Textile Shop",       # STREETWEAR      — consumes RAW_MATERIAL
+	14: "Boutique",           # DESIGNER_BAG    — needs Bank service
+	15: "Forge",              # TOOLS           — consumes RAW_MATERIAL
+	16: "Pawn Shop",          # SCRAP_METAL     — no inputs required
+	17: "Souvenir Shop",      # SOUVENIR        — no inputs required
+	18: "Bookshop",           # BOOK            — consumes RAW_MATERIAL
+	19: "Antique Shop",       # ANTIQUE         — needs Bank service
+	20: "Pawn Shop",          # FAKE_ID         — gray-market, same building as scrap
 }
 
 # ── NPC role names per [district_id][npc_type] ─────────────────────────────
@@ -124,7 +126,7 @@ const DISTRICTS: Array = [
 	{"id": 0, "name": "Suburbs",
 	  "floor": Color(0.50, 0.65, 0.36), "bldg": Color(0.78, 0.65, 0.52),
 	  "ox": 2400, "oy": 1440, "cols": 8, "rows": 6,
-	  "police_w": 0.10, "civilian_w": 0.65, "customer_w": 0.25,
+	  "police_w": 0.02, "civilian_w": 0.65, "customer_w": 0.25,
 	  "pref": [0, 3], "st_name": "Oak St", "ave_name": "Maple Ave",
 	  "special_blocks": [{"col": 3, "row": 2, "type": "park"},
 						  {"col": 6, "row": 4, "type": "park"}],
@@ -132,7 +134,7 @@ const DISTRICTS: Array = [
 	{"id": 1, "name": "Downtown",
 	  "floor": Color(0.40, 0.46, 0.52), "bldg": Color(0.44, 0.50, 0.60),
 	  "ox": 7200, "oy": 2160, "cols": 10, "rows": 8,
-	  "police_w": 0.45, "civilian_w": 0.30, "customer_w": 0.25,
+	  "police_w": 0.02, "civilian_w": 0.30, "customer_w": 0.25,
 	  "pref": [1, 4, 2], "st_name": "Commerce St", "ave_name": "Main Ave",
 	  "special_blocks": [],
 	  "mega_blocks": [{"col": 2, "row": 1, "type": "bank"},
@@ -142,7 +144,7 @@ const DISTRICTS: Array = [
 	{"id": 2, "name": "Industrial",
 	  "floor": Color(0.42, 0.36, 0.28), "bldg": Color(0.50, 0.44, 0.36),
 	  "ox": 1800, "oy": 7200, "cols": 6, "rows": 8,
-	  "police_w": 0.10, "civilian_w": 0.55, "customer_w": 0.35,
+	  "police_w": 0.02, "civilian_w": 0.55, "customer_w": 0.35,
 	  "pref": [0, 4], "st_name": "Factory St", "ave_name": "Mill Ave",
 	  "special_blocks": [],
 	  "mega_blocks": [{"col": 1, "row": 2, "type": "factory"},
@@ -151,7 +153,7 @@ const DISTRICTS: Array = [
 	{"id": 3, "name": "Tourist Strip",
 	  "floor": Color(0.74, 0.63, 0.44), "bldg": Color(0.82, 0.72, 0.54),
 	  "ox": 13200, "oy": 1080, "cols": 8, "rows": 6,
-	  "police_w": 0.20, "civilian_w": 0.30, "customer_w": 0.50,
+	  "police_w": 0.02, "civilian_w": 0.30, "customer_w": 0.50,
 	  "pref": [2, 3, 1], "st_name": "Neon St", "ave_name": "Strip Ave",
 	  "special_blocks": [],
 	  "mega_blocks": [{"col": 3, "row": 1, "type": "casino"},
@@ -159,7 +161,7 @@ const DISTRICTS: Array = [
 	{"id": 4, "name": "Harbor",
 	  "floor": Color(0.26, 0.35, 0.42), "bldg": Color(0.34, 0.42, 0.50),
 	  "ox": 1800, "oy": 14400, "cols": 7, "rows": 6,
-	  "police_w": 0.10, "civilian_w": 0.40, "customer_w": 0.50,
+	  "police_w": 0.02, "civilian_w": 0.40, "customer_w": 0.50,
 	  "pref": [0, 1, 4], "st_name": "Wharf St", "ave_name": "Dock Ave",
 	  "special_blocks": [{"col": 0, "row": 4, "type": "port"},
 						  {"col": 1, "row": 4, "type": "port"},
@@ -187,7 +189,7 @@ const DISTRICTS: Array = [
 	{"id": 6, "name": "Tech Quarter",
 	  "floor": Color(0.32, 0.40, 0.50), "bldg": Color(0.38, 0.46, 0.58),
 	  "ox": 18000, "oy": 1800, "cols": 9, "rows": 7,
-	  "police_w": 0.35, "civilian_w": 0.35, "customer_w": 0.30,
+	  "police_w": 0.02, "civilian_w": 0.35, "customer_w": 0.30,
 	  "pref": [1, 2, 4], "st_name": "Circuit St", "ave_name": "Silicon Ave",
 	  "special_blocks": [{"col": 4, "row": 3, "type": "statue"}],
 	  "mega_blocks": [{"col": 1, "row": 1, "type": "tech_campus"},
@@ -195,7 +197,7 @@ const DISTRICTS: Array = [
 	{"id": 7, "name": "Market District",
 	  "floor": Color(0.58, 0.50, 0.36), "bldg": Color(0.66, 0.56, 0.40),
 	  "ox": 14400, "oy": 7200, "cols": 8, "rows": 7,
-	  "police_w": 0.10, "civilian_w": 0.30, "customer_w": 0.60,
+	  "police_w": 0.02, "civilian_w": 0.30, "customer_w": 0.60,
 	  "pref": [0, 1, 2, 3, 4], "st_name": "Market St", "ave_name": "Bazaar Ave",
 	  "special_blocks": [{"col": 3, "row": 3, "type": "market_square"},
 						  {"col": 4, "row": 3, "type": "market_square"}],
@@ -203,7 +205,7 @@ const DISTRICTS: Array = [
 	{"id": 8, "name": "Beachfront",
 	  "floor": Color(0.76, 0.70, 0.50), "bldg": Color(0.84, 0.78, 0.60),
 	  "ox": 6000, "oy": 18000, "cols": 28, "rows": 5,
-	  "police_w": 0.15, "civilian_w": 0.35, "customer_w": 0.50,
+	  "police_w": 0.02, "civilian_w": 0.35, "customer_w": 0.50,
 	  "pref": [0, 2, 3], "st_name": "Shore St", "ave_name": "Palm Ave",
 	  "special_blocks": [{"col": 0,  "row": 4, "type": "beach"},
 						  {"col": 1,  "row": 4, "type": "beach"},
@@ -264,7 +266,7 @@ const DISTRICTS: Array = [
 	{"id": 9, "name": "Old Town",
 	  "floor": Color(0.48, 0.40, 0.32), "bldg": Color(0.56, 0.46, 0.36),
 	  "ox": 22200, "oy": 7200, "cols": 7, "rows": 9,
-	  "police_w": 0.10, "civilian_w": 0.45, "customer_w": 0.45,
+	  "police_w": 0.02, "civilian_w": 0.45, "customer_w": 0.45,
 	  "pref": [0, 3, 1], "st_name": "Cobble St", "ave_name": "Heritage Ave",
 	  "special_blocks": [{"col": 2, "row": 3, "type": "town_square"},
 						  {"col": 3, "row": 3, "type": "town_square"},
@@ -291,9 +293,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 1 — Downtown
 	{"biz_types": ["Office Tower", "Law Firm", "Bank", "Hotel",
-					 "Restaurant", "Boutique", "Gallery", "Insurance Co."],
+					 "Restaurant", "Boutique", "Gallery", "Insurance Co.", "Flat", "Estate Agency"],
 	  "prop_types": ["Office", "Office", "Financial", "Hotel",
-					 "Commercial", "Retail", "Cultural", "Financial"],
+					 "Commercial", "Retail", "Cultural", "Financial", "Residential", "Office"],
 	  "prefixes": ["Central", "Metro", "Premier", "Elite", "Grand", "City",
 					 "Urban", "Apex", "Pinnacle", "Meridian"],
 	  "price_lo": 200000, "price_hi": 800000,
@@ -313,9 +315,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 3 — Tourist Strip
 	{"biz_types": ["Casino", "Nightclub", "Hotel", "Bar",
-					 "Souvenir Shop", "Arcade", "Lounge", "Show Venue"],
+					 "Souvenir Shop", "Arcade", "Lounge", "Show Venue", "Flat"],
 	  "prop_types": ["Entertainment", "Entertainment", "Hotel", "Commercial",
-					 "Retail", "Entertainment", "Commercial", "Entertainment"],
+					 "Retail", "Entertainment", "Commercial", "Entertainment", "Residential"],
 	  "prefixes": ["Neon", "Lucky", "Golden", "Vegas", "Strip", "Glitter",
 					 "Sunset", "Electric", "Dazzle", "Jackpot"],
 	  "price_lo": 80000, "price_hi": 300000,
@@ -346,9 +348,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.05},
 	# 6 — Tech Quarter
 	{"biz_types": ["Tech Lab", "Startup Hub", "Data Centre", "Co-working Space",
-					 "Chip Factory", "R&D Campus", "VR Studio", "Server Farm"],
+					 "Chip Factory", "R&D Campus", "VR Studio", "Server Farm", "Flat"],
 	  "prop_types": ["Industrial", "Office", "Industrial", "Office",
-					 "Industrial", "Office", "Commercial", "Industrial"],
+					 "Industrial", "Office", "Commercial", "Industrial", "Residential"],
 	  "prefixes": ["Nano", "Pixel", "Quantum", "Binary", "Digital",
 					 "Cyber", "Neural", "Helix", "Vertex", "Apex"],
 	  "price_lo": 150000, "price_hi": 600000,
@@ -357,9 +359,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 7 — Market District
 	{"biz_types": ["Market Stall", "Street Food", "Import Store", "Electronics Bazaar",
-					 "Spice Shop", "Textile Shop", "Jewellers", "Florist"],
+					 "Spice Shop", "Textile Shop", "Jewellers", "Florist", "Flat", "Estate Agency"],
 	  "prop_types": ["Retail", "Commercial", "Retail", "Retail",
-					 "Retail", "Retail", "Retail", "Commercial"],
+					 "Retail", "Retail", "Retail", "Commercial", "Residential", "Office"],
 	  "prefixes": ["Grand", "Old", "Spice", "East", "West", "Night",
 					 "Gold", "Silver", "Silk", "Jade"],
 	  "price_lo": 20000, "price_hi": 80000,
@@ -379,9 +381,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 9 — Old Town
 	{"biz_types": ["Antique Shop", "Guild Hall", "Manor House", "Inn",
-					 "Cobbler", "Jewellers", "Apothecary", "Bookshop"],
+					 "Cobbler", "Jewellers", "Apothecary", "Bookshop", "Estate Agency"],
 	  "prop_types": ["Retail", "Cultural", "Residential", "Hotel",
-					 "Commercial", "Retail", "Commercial", "Retail"],
+					 "Commercial", "Retail", "Commercial", "Retail", "Office"],
 	  "prefixes": ["Old", "Ancient", "Royal", "Grand", "Stone",
 					 "Gilded", "Cobbled", "Ivory", "Raven", "Crimson"],
 	  "price_lo": 45000, "price_hi": 160000,

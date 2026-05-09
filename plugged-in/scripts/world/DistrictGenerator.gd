@@ -225,16 +225,19 @@ func _spawn_block(bx: float, by_: float,
 			meta["sells_item_id"]   = sf_item
 			meta["sells_item_name"] = sf_iname
 			meta["sell_price"]      = sf_price
+			# Stock is now the building's output_buffer, filled by _try_produce() each
+			# noon from real supply-chain inputs.  No stock field needed here.
 		if is_atm:
 			meta["atm"] = true
 
 		_apply_econ_fields(meta, biz_type, prop_type, did)
 		_spawn_building(sx + pad_x + sw * 0.5, sy + pad_y + sh * 0.5, sw, sh, draw_col, meta)
 
-	_npc_spawner.spawn_npc_at(
-		bx + WorldData.BLOCK_W * 0.5 + randf_range(-40, 40),
-		by_ + WorldData.BLOCK_H * 0.5 + randf_range(-30, 30),
-		did, pref, pw, cw, kw * 0.4)
+	for _i: int in range(3):
+		_npc_spawner.spawn_npc_at(
+			bx + WorldData.BLOCK_W * 0.5 + randf_range(-40, 40),
+			by_ + WorldData.BLOCK_H * 0.5 + randf_range(-30, 30),
+			did, pref, pw, cw, kw * 0.4)
 
 
 # =============================================================================
@@ -364,8 +367,9 @@ func _spawn_mega_block(bx: float, by_: float,
 	_spawn_building(cx, cy, sw, sh, tint, meta)
 
 	var pref: Array = []
-	_npc_spawner.spawn_npc_at(bx + WorldData.BLOCK_W * 0.5, by_ + WorldData.BLOCK_H * 0.5,
-							  did, pref, pw * 0.5, cw, 0.15)
+	for _i: int in range(3):
+		_npc_spawner.spawn_npc_at(bx + WorldData.BLOCK_W * 0.5, by_ + WorldData.BLOCK_H * 0.5,
+								  did, pref, pw * 0.5, cw, 0.15)
 
 
 # =============================================================================
@@ -376,8 +380,13 @@ func _spawn_building(cx: float, cy: float, w: float, h: float,
 	meta["_world_pos"] = Vector2(cx, cy)
 	_all_bldg_pos.append(Vector2(cx, cy))
 	_all_bldg_metas.append(meta)
-	if meta.get("storefront", false):
-		_storefront_registry.append({"pos": Vector2(cx, cy), "item_id": meta["sells_item_id"], "meta": meta})
+	# Register every item this building produces so NPCs and the player can find it.
+	# All non-residential buildings participate — not just the one storefront per block.
+	if meta.get("property_type", "") != "Residential":
+		var recipe:  Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
+		var outputs: Dictionary = recipe.get("outputs", {})
+		for item_id: int in outputs.keys():
+			_storefront_registry.append({"pos": Vector2(cx, cy), "item_id": item_id, "meta": meta})
 
 	var body := StaticBody2D.new()
 	body.position      = Vector2(cx, cy)
@@ -452,11 +461,22 @@ func _apply_econ_fields(meta: Dictionary, biz_type: String, prop_type: String, d
 	meta["biz_category"]  = econ_recipe.get("category", "commercial")
 	meta["input_buffer"]  = {}
 	meta["output_buffer"] = {}
-	meta["cash_reserves"] = float(randi_range(50, 500))
+	# Residential buildings start with no cash — they earn only from tenant rent payments.
+	var is_residential: bool = (prop_type == "Residential")
+	meta["cash_reserves"] = 0.0 if is_residential else float(randi_range(50, 500))
 	meta["wages_per_day"] = BusinessDB.wages_for(meta)
 	meta["rent_per_day"]  = BusinessDB.rent_for(meta)
 	meta["operational"]   = (meta.get("status", "") == "occupied")
 	meta["debt"]          = 0.0
+	# Seed one production batch so businesses are active from the first tick.
+	# Inputs give producers something to consume before the first market board
+	# pass; outputs give buyers something to purchase immediately on day 1.
+	var inputs:  Dictionary = econ_recipe.get("inputs",  {})
+	var outputs: Dictionary = econ_recipe.get("outputs", {})
+	for item_id: int in inputs.keys():
+		meta["input_buffer"][item_id] = int(inputs[item_id])
+	for item_id: int in outputs.keys():
+		meta["output_buffer"][item_id] = int(outputs[item_id])
 	var owner_id: int     = _assign_owner(prop_type, did)
 	meta["owner_id"]      = owner_id
 	meta["owner_name"]    = _landowners[owner_id]["name"] if owner_id >= 0 else "City (For Sale)"
@@ -474,6 +494,13 @@ func _apply_econ_fields_mega(meta: Dictionary, biz_type: String, prop_type: Stri
 	meta["rent_per_day"]  = BusinessDB.rent_for(meta) * 2.5
 	meta["operational"]   = true
 	meta["debt"]          = 0.0
+	# Mega buildings get 3× seed stock to reflect their larger capacity.
+	var inputs:  Dictionary = econ_recipe.get("inputs",  {})
+	var outputs: Dictionary = econ_recipe.get("outputs", {})
+	for item_id: int in inputs.keys():
+		meta["input_buffer"][item_id] = int(inputs[item_id]) * 3
+	for item_id: int in outputs.keys():
+		meta["output_buffer"][item_id] = int(outputs[item_id]) * 3
 	var owner_id: int     = _assign_owner(prop_type, did)
 	meta["owner_id"]      = owner_id
 	meta["owner_name"]    = _landowners[owner_id]["name"] if owner_id >= 0 else "City (For Sale)"

@@ -28,6 +28,12 @@ var _detail_panel: PanelContainer = null
 var _detail_body:  VBoxContainer  = null
 var _detail_title: Label          = null
 
+# ── Filter state ─────────────────────────────────────────────────────
+var _filter_search:   String = ""
+var _filter_status:   String = ""
+var _filter_category: String = ""
+var _filter_district: String = ""
+
 
 func _ready() -> void:
 	layer   = 21
@@ -88,6 +94,97 @@ func _build_ui() -> void:
 	close_btn.text = "  ✕  Close  [G]  "
 	close_btn.pressed.connect(func() -> void: visible = false)
 	title_row.add_child(close_btn)
+
+	outer.add_child(HSeparator.new())
+
+	# ── Filter bar ───────────────────────────────────────────────────────
+	var fbar := HBoxContainer.new()
+	fbar.add_theme_constant_override("separation", 8)
+	fbar.add_theme_constant_override("margin_top", 2)
+	outer.add_child(fbar)
+
+	var search_edit := LineEdit.new()
+	search_edit.placeholder_text    = "Search name…"
+	search_edit.custom_minimum_size = Vector2(170, 0)
+	search_edit.text_changed.connect(func(t: String) -> void:
+		_filter_search = t.to_lower()
+		_refresh()
+	)
+	fbar.add_child(search_edit)
+
+	var status_lbl := Label.new()
+	status_lbl.text = "Status:"
+	status_lbl.add_theme_font_size_override("font_size", 12)
+	status_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(status_lbl)
+	var status_opt := OptionButton.new()
+	for s: String in ["All", "Operating", "Suspended", "Abandoned"]:
+		status_opt.add_item(s)
+	status_opt.item_selected.connect(func(idx: int) -> void:
+		_filter_status = "" if idx == 0 else status_opt.get_item_text(idx).to_lower()
+		_refresh()
+	)
+	fbar.add_child(status_opt)
+
+	var cat_lbl := Label.new()
+	cat_lbl.text = "Category:"
+	cat_lbl.add_theme_font_size_override("font_size", 12)
+	cat_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(cat_lbl)
+	var cat_opt := OptionButton.new()
+	cat_opt.add_item("All")
+	var _seen_cats: Array = []
+	for meta: Dictionary in _buildings:
+		var cat: String = meta.get("biz_category", "")
+		if cat != "" and cat not in _seen_cats:
+			_seen_cats.append(cat)
+	_seen_cats.sort()
+	for cat: String in _seen_cats:
+		cat_opt.add_item(cat.capitalize())
+	cat_opt.item_selected.connect(func(idx: int) -> void:
+		_filter_category = "" if idx == 0 else cat_opt.get_item_text(idx).to_lower()
+		_refresh()
+	)
+	fbar.add_child(cat_opt)
+
+	var dist_lbl := Label.new()
+	dist_lbl.text = "District:"
+	dist_lbl.add_theme_font_size_override("font_size", 12)
+	dist_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(dist_lbl)
+	var dist_opt := OptionButton.new()
+	dist_opt.add_item("All")
+	var _seen_dists: Array = []
+	for meta: Dictionary in _buildings:
+		var d: String = meta.get("district", "")
+		if d != "" and d not in _seen_dists:
+			_seen_dists.append(d)
+	_seen_dists.sort()
+	for d: String in _seen_dists:
+		dist_opt.add_item(d)
+	dist_opt.item_selected.connect(func(idx: int) -> void:
+		_filter_district = "" if idx == 0 else dist_opt.get_item_text(idx)
+		_refresh()
+	)
+	fbar.add_child(dist_opt)
+
+	var fspacer := Control.new()
+	fspacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fbar.add_child(fspacer)
+	var clear_btn := Button.new()
+	clear_btn.text = "Clear Filters"
+	clear_btn.pressed.connect(func() -> void:
+		_filter_search   = ""
+		_filter_status   = ""
+		_filter_category = ""
+		_filter_district = ""
+		search_edit.text = ""
+		status_opt.select(0)
+		cat_opt.select(0)
+		dist_opt.select(0)
+		_refresh()
+	)
+	fbar.add_child(clear_btn)
 
 	outer.add_child(HSeparator.new())
 
@@ -183,6 +280,27 @@ func _refresh() -> void:
 	var row_idx: int = 0
 	for meta: Dictionary in _buildings:
 		if meta.is_empty():
+			continue
+		# Search filter
+		if _filter_search != "" and not (meta.get("biz_name", "") as String).to_lower().contains(_filter_search):
+			continue
+		# Status filter
+		if _filter_status != "":
+			var _st: String = meta.get("status", "occupied")
+			var _st_key: String
+			if _st == "abandoned":
+				_st_key = "abandoned"
+			elif meta.get("operational", false):
+				_st_key = "operating"
+			else:
+				_st_key = "suspended"
+			if _st_key != _filter_status:
+				continue
+		# Category filter
+		if _filter_category != "" and (meta.get("biz_category", "") as String).to_lower() != _filter_category:
+			continue
+		# District filter
+		if _filter_district != "" and meta.get("district", "") != _filter_district:
 			continue
 		_body.add_child(_make_row(meta, row_idx))
 		row_idx += 1

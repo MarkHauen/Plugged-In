@@ -27,6 +27,12 @@ var _detail_panel: PanelContainer = null
 var _detail_body:  VBoxContainer  = null
 var _detail_title: Label          = null
 
+# ── Filter state ─────────────────────────────────────────────────────
+var _filter_search:   String = ""
+var _filter_type:     int    = -1   # -1 = all, else NPC.Type value
+var _filter_state:    String = ""
+var _filter_district: int    = -1   # -1 = all, else district_id
+
 
 func _ready() -> void:
 	layer   = 20
@@ -89,6 +95,87 @@ func _build_ui() -> void:
 	close_btn.text = "  ✕  Close  [F]  "
 	close_btn.pressed.connect(func() -> void: visible = false)
 	title_row.add_child(close_btn)
+
+	outer.add_child(HSeparator.new())
+
+	# ── Filter bar ───────────────────────────────────────────────────────
+	var fbar := HBoxContainer.new()
+	fbar.add_theme_constant_override("separation", 8)
+	outer.add_child(fbar)
+
+	var search_edit := LineEdit.new()
+	search_edit.placeholder_text    = "Search name…"
+	search_edit.custom_minimum_size = Vector2(170, 0)
+	search_edit.text_changed.connect(func(t: String) -> void:
+		_filter_search = t.to_lower()
+		_refresh()
+	)
+	fbar.add_child(search_edit)
+
+	var type_lbl := Label.new()
+	type_lbl.text = "Type:"
+	type_lbl.add_theme_font_size_override("font_size", 12)
+	type_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(type_lbl)
+	var type_opt := OptionButton.new()
+	for s: String in ["All", "Civilian", "Tourist", "Police"]:
+		type_opt.add_item(s)
+	type_opt.item_selected.connect(func(idx: int) -> void:
+		match idx:
+			0: _filter_type = -1
+			1: _filter_type = NPC.Type.CIVILIAN
+			2: _filter_type = NPC.Type.TOURIST
+			3: _filter_type = NPC.Type.POLICE
+		_refresh()
+	)
+	fbar.add_child(type_opt)
+
+	var state_lbl := Label.new()
+	state_lbl.text = "State:"
+	state_lbl.add_theme_font_size_override("font_size", 12)
+	state_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(state_lbl)
+	var state_opt := OptionButton.new()
+	for s: String in ["All", "OK", "Struggling", "Unemployed", "Unhoused"]:
+		state_opt.add_item(s)
+	state_opt.item_selected.connect(func(idx: int) -> void:
+		_filter_state = "" if idx == 0 else state_opt.get_item_text(idx).to_lower()
+		_refresh()
+	)
+	fbar.add_child(state_opt)
+
+	var dist_lbl := Label.new()
+	dist_lbl.text = "District:"
+	dist_lbl.add_theme_font_size_override("font_size", 12)
+	dist_lbl.add_theme_color_override("font_color", C_DIM)
+	fbar.add_child(dist_lbl)
+	var dist_opt := OptionButton.new()
+	dist_opt.add_item("All")
+	for i: int in range(_districts.size()):
+		dist_opt.add_item(_districts[i]["name"])
+	dist_opt.item_selected.connect(func(idx: int) -> void:
+		_filter_district = idx - 1
+		_refresh()
+	)
+	fbar.add_child(dist_opt)
+
+	var fspacer := Control.new()
+	fspacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fbar.add_child(fspacer)
+	var clear_btn := Button.new()
+	clear_btn.text = "Clear Filters"
+	clear_btn.pressed.connect(func() -> void:
+		_filter_search   = ""
+		_filter_type     = -1
+		_filter_state    = ""
+		_filter_district = -1
+		search_edit.text = ""
+		type_opt.select(0)
+		state_opt.select(0)
+		dist_opt.select(0)
+		_refresh()
+	)
+	fbar.add_child(clear_btn)
 
 	outer.add_child(HSeparator.new())
 
@@ -186,6 +273,33 @@ func _refresh() -> void:
 	for npc: NPC in _npcs:
 		if not is_instance_valid(npc):
 			continue
+		# Search filter
+		if _filter_search != "" and not npc.display_name.to_lower().contains(_filter_search):
+			continue
+		# Type filter
+		if _filter_type != -1 and npc.npc_type != _filter_type:
+			continue
+		# District filter
+		if _filter_district != -1 and npc.district_id != _filter_district:
+			continue
+		# State filter (civilians only)
+		if _filter_state != "":
+			if npc.npc_type != NPC.Type.CIVILIAN:
+				continue
+			var _matches: bool
+			match _filter_state:
+				"ok":
+					_matches = not npc._is_struggling
+				"struggling":
+					_matches = npc._is_struggling
+				"unemployed":
+					_matches = npc.employer_meta.is_empty()
+				"unhoused":
+					_matches = npc.home_meta.is_empty()
+				_:
+					_matches = true
+			if not _matches:
+				continue
 		_body.add_child(_make_row(npc, row_idx))
 		row_idx += 1
 		visible_count += 1
