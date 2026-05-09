@@ -14,7 +14,7 @@ extends RefCounted
 
 class_name DebugOverlay
 
-var debug_mode:    bool = true
+var debug_mode:    bool = false
 var _scene_root:   Node
 var _debug_layer:  Node2D
 var _highway_layer:Node2D

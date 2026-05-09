@@ -463,7 +463,7 @@ func _apply_econ_fields(meta: Dictionary, biz_type: String, prop_type: String, d
 	meta["output_buffer"] = {}
 	# Residential buildings start with no cash — they earn only from tenant rent payments.
 	var is_residential: bool = (prop_type == "Residential")
-	meta["cash_reserves"] = 0.0 if is_residential else float(randi_range(50, 500))
+	meta["cash_reserves"] = 0.0 if is_residential else float(randi_range(300, 1500))
 	meta["wages_per_day"] = BusinessDB.wages_for(meta)
 	meta["rent_per_day"]  = BusinessDB.rent_for(meta)
 	meta["operational"]   = (meta.get("status", "") == "occupied")
@@ -489,7 +489,7 @@ func _apply_econ_fields_mega(meta: Dictionary, biz_type: String, prop_type: Stri
 	meta["biz_category"]  = econ_recipe.get("category", "commercial")
 	meta["input_buffer"]  = {}
 	meta["output_buffer"] = {}
-	meta["cash_reserves"] = float(randi_range(2000, 20000))
+	meta["cash_reserves"] = float(randi_range(5000, 30000))
 	meta["wages_per_day"] = BusinessDB.wages_for(meta) * 3.0
 	meta["rent_per_day"]  = BusinessDB.rent_for(meta) * 2.5
 	meta["operational"]   = true

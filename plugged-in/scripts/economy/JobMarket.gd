@@ -93,6 +93,23 @@ func assign_initial_homes() -> void:
 		_assign_home(npc, homes)
 
 
+## Seed each civilian NPC with a realistic starting bank balance.
+## Call once after assign_initial_jobs() and assign_initial_homes() so that
+## daily_wage and daily_rent are already populated.
+## Balance = 7–21 days of wages, floored at $20 so even the unemployed
+## have a little spending money at game start.
+func seed_starting_balances() -> void:
+	for npc_node in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.CIVILIAN:
+			continue
+		var days: float = randf_range(7.0, 21.0)
+		npc.balance = maxf(20.0, npc.daily_wage * days)
+		npc._update_struggling_tint()
+
+
 ## Assign every tourist in _all_npcs to their nearest available hotel.
 ## Call this after spawn_tourists() so new arrivals get a room.
 func assign_tourist_hotels() -> void:

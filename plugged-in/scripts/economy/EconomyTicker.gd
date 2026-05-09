@@ -16,7 +16,10 @@ class_name EconomyTicker
 ## Daily property tax as a fraction of a building's market price.
 ## 0.0001 = 0.01% per day ≈ 3.65% annually.
 const PROPERTY_TAX_RATE: float = 0.0001
-
+## Flat cash payment given each NIGHT to civilians who are unhoused or struggling.
+const WELFARE_PAYMENT:      float = 25.0
+## City treasury must hold at least this much before welfare is disbursed.
+const WELFARE_TREASURY_MIN: float = 500.0
 var _all_bldg_metas: Array   # every building's meta Dictionary, shared with City.gd
 var _all_npcs:       Array   # every live NPC node, shared with City.gd
 var _landowners:     Array   # landowner Dictionaries: { cash, income_per_day, owned_buildings, … }
@@ -137,6 +140,7 @@ func _tick_night() -> void:
 	_check_property_management()
 	_recover_suspended_buildings()
 	_tick_night_npcs()
+	_pay_welfare()
 	_job_market.run_night_tick()
 
 
@@ -258,6 +262,31 @@ func _cull_tourists() -> void:
 					npc.queue_free()
 					_all_npcs.remove_at(i)
 		i -= 1
+
+
+# =============================================================================
+#  WELFARE — nightly payment to civilians who are unhoused or struggling.
+#  Funded from city_treasury; payments stop when the treasury runs low.
+# =============================================================================
+func _pay_welfare() -> void:
+	if city_treasury < WELFARE_TREASURY_MIN:
+		return
+	for npc_node: NPC in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.CIVILIAN:
+			continue
+		# Qualify: unhoused OR balance is below one day's rent (struggling)
+		var unhoused:   bool = npc.home_meta.is_empty()
+		var struggling: bool = npc._is_struggling
+		if not (unhoused or struggling):
+			continue
+		if city_treasury < WELFARE_TREASURY_MIN:
+			break   # treasury drained mid-pass — stop paying
+		npc.balance     += WELFARE_PAYMENT
+		city_treasury   -= WELFARE_PAYMENT
+		npc._update_struggling_tint()
 
 
 # =============================================================================

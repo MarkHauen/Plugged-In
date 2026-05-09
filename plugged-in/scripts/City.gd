@@ -118,6 +118,7 @@ func _ready() -> void:
 	_job_market = JobMarketScript.new(_all_bldg_metas, _all_npcs)
 	_job_market.assign_initial_jobs()
 	_job_market.assign_initial_homes()
+	_job_market.seed_starting_balances()
 
 	_economy_ticker = EconomyTickerScript.new(
 	_all_bldg_metas, _all_npcs, _landowner_system.landowners, _job_market)
