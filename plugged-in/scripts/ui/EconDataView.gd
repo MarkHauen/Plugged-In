@@ -38,6 +38,8 @@ var _filter_district: String = ""
 func _ready() -> void:
 	layer   = 21
 	visible = false
+	# Refresh the table automatically on every economy phase tick.
+	EconomyManager.phase_changed.connect(_on_phase_changed)
 
 
 ## Called by City.gd after the building meta array is populated.
@@ -51,6 +53,11 @@ func toggle() -> void:
 	if visible:
 		if _body == null:
 			_build_ui()
+		_refresh()
+
+
+func _on_phase_changed(_phase: int) -> void:
+	if visible:
 		_refresh()
 
 

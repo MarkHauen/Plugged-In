@@ -37,6 +37,9 @@ enum ID {
 	FINANCIAL_SERVICE,      # 25
 	LEGAL_SERVICE,          # 26
 	PROPERTY_MANAGEMENT,    # 27
+	# ── Luxury Food & Drink ─────────────────────────────────────────
+	COCKTAIL,      # 28
+	FINE_DINING,   # 29
 }
 
 ## item_id (ItemDB.ID) → { "name": String, "base_price": int }
@@ -68,6 +71,9 @@ const CATALOG: Dictionary = {
 	ID.ANTIQUE:      { "name": "Antique",      "base_price": 110 },
 	# Gray Market
 	ID.FAKE_ID:      { "name": "Fake ID",      "base_price": 75  },
+	# Luxury Food & Drink
+	ID.COCKTAIL:     { "name": "Cocktail",     "base_price": 45  },
+	ID.FINE_DINING:  { "name": "Fine Dining",  "base_price": 75  },
 	# Perishables
 	ID.FLOWER:       { "name": "Flower",       "base_price": 22  },
 	# Intermediate Goods — B2B only; never sold at retail storefronts

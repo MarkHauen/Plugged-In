@@ -32,11 +32,13 @@ var _filter_search:   String = ""
 var _filter_type:     int    = -1   # -1 = all, else NPC.Type value
 var _filter_state:    String = ""
 var _filter_district: int    = -1   # -1 = all, else district_id
+var _selected_npc:    NPC    = null  # NPC currently shown in the detail panel
 
 
 func _ready() -> void:
 	layer   = 20
 	visible = false
+	EconomyManager.phase_changed.connect(_on_phase_changed_detail)
 
 
 ## Called by City.gd after NPC and district arrays are populated.
@@ -455,6 +457,7 @@ func _cell(text: String, w: int, col: Color = Color(0.82, 0.82, 0.82)) -> Label:
 func _show_npc_detail(npc: NPC) -> void:
 	if _detail_panel == null:
 		return
+	_selected_npc = npc
 	_detail_title.text = "◀  " + npc.display_name
 	for ch: Node in _detail_body.get_children():
 		_detail_body.remove_child(ch)
@@ -505,6 +508,40 @@ func _show_npc_detail(npc: NPC) -> void:
 			_detail_body.add_child(_detail_row("  Rent/day", "$%.2f" % npc.daily_rent))
 			_detail_body.add_child(_detail_row("  Tenants",  str(npc.home_meta.get("_tenant_count", 0))))
 
+	# ── Balance sparkline ────────────────────────────────────────────────
+	if npc.npc_type == NPC.Type.CIVILIAN and not npc.balance_history.is_empty():
+		_detail_body.add_child(HSeparator.new())
+		var spark_hdr := Label.new()
+		spark_hdr.text = "Balance History (%d days)" % npc.balance_history.size()
+		spark_hdr.add_theme_font_size_override("font_size", 11)
+		spark_hdr.add_theme_color_override("font_color", Color(0.55, 0.75, 1.00))
+		_detail_body.add_child(spark_hdr)
+		var spark := _BalanceSparkline.new()
+		spark._data = npc.balance_history.duplicate()
+		spark.custom_minimum_size        = Vector2(0, 58)
+		spark.size_flags_horizontal      = Control.SIZE_EXPAND_FILL
+		_detail_body.add_child(spark)
+
+	# ── Life log ──────────────────────────────────────────────────────────
+	if npc.npc_type == NPC.Type.CIVILIAN and not npc.life_log.is_empty():
+		_detail_body.add_child(HSeparator.new())
+		var log_hdr := Label.new()
+		log_hdr.text = "Life Log  (newest first)"
+		log_hdr.add_theme_font_size_override("font_size", 11)
+		log_hdr.add_theme_color_override("font_color", Color(0.55, 0.75, 1.00))
+		_detail_body.add_child(log_hdr)
+		var log_lbl := RichTextLabel.new()
+		log_lbl.bbcode_enabled    = false
+		log_lbl.fit_content       = true
+		log_lbl.scroll_active     = false
+		log_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		log_lbl.add_theme_font_size_override("normal_font_size", 10)
+		log_lbl.add_theme_color_override("default_color", C_NORM)
+		var shown: Array = npc.life_log.slice(maxi(0, npc.life_log.size() - 40))
+		shown.reverse()
+		log_lbl.text = "\n".join(shown)
+		_detail_body.add_child(log_lbl)
+
 	_detail_panel.visible = true
 
 
@@ -526,3 +563,49 @@ func _detail_row(key: String, value: String) -> HBoxContainer:
 	v.add_theme_color_override("font_color", C_NORM)
 	hb.add_child(v)
 	return hb
+
+
+## Refresh detail panel automatically when the economy ticks.
+func _on_phase_changed_detail(_phase: int) -> void:
+	if _detail_panel != null and _detail_panel.visible \
+			and _selected_npc != null and is_instance_valid(_selected_npc):
+		_show_npc_detail(_selected_npc)
+
+
+## Mini line-graph drawn inline in the detail panel.
+class _BalanceSparkline extends Control:
+	var _data: Array = []
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		if _data.size() < 2 or w == 0 or h == 0:
+			return
+		# Background
+		draw_rect(Rect2(0.0, 0.0, w, h), Color(0.06, 0.08, 0.14, 0.85))
+		# Find range
+		var lo: float = float(_data.min())
+		var hi: float = float(_data.max())
+		if hi <= lo:
+			hi = lo + 1.0
+		# Draw zero-line if negative values present
+		if lo < 0.0:
+			var zy := h - (-lo / (hi - lo)) * h
+			draw_line(Vector2(0.0, zy), Vector2(w, zy), Color(0.8, 0.3, 0.3, 0.4), 1.0)
+		# Draw sparkline
+		var n := _data.size()
+		for i: int in range(1, n):
+			var x0 := float(i - 1) / float(n - 1) * w
+			var x1 := float(i)     / float(n - 1) * w
+			var y0 := h - (float(_data[i - 1]) - lo) / (hi - lo) * h
+			var y1 := h - (float(_data[i])     - lo) / (hi - lo) * h
+			draw_line(Vector2(x0, y0), Vector2(x1, y1), Color(0.35, 0.90, 1.00), 1.5)
+		# Labels: min, max, latest
+		var fnt := ThemeDB.fallback_font
+		draw_string(fnt, Vector2(2.0, 11.0), "$%.0f" % hi,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.55, 0.75, 1.00, 0.70))
+		draw_string(fnt, Vector2(2.0, h - 2.0), "$%.0f" % lo,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.55, 0.75, 1.00, 0.70))
+		var last := float(_data.back())
+		draw_string(fnt, Vector2(w - 60.0, 11.0), "now $%.0f" % last,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.35, 0.90, 1.00))

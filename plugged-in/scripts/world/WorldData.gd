@@ -53,16 +53,16 @@ const ORDINALS: Array = [
 
 # ── District storefront items (ItemDB.ID values per district) ─────────────
 const DISTRICT_STOREFRONT_ITEMS: Array = [
-	[0, 1, 2, 6, 7],            # 0 Suburbs
-	[11, 14, 10, 8, 18],        # 1 Downtown
-	[15, 16, 7, 5, 10],         # 2 Industrial
-	[17, 2, 11, 12, 3],         # 3 Tourist Strip
-	[16, 15, 4, 1, 2],          # 4 Harbor
-	[1, 0, 16, 20, 13],         # 5 Slums
-	[10, 5, 9, 8, 7],           # 6 Tech Quarter
-	[4, 1, 13, 19, 17, 15, 20], # 7 Market District
-	[3, 2, 12, 17, 11],         # 8 Beachfront
-	[19, 18, 4, 14, 17],        # 9 Old Town
+	[0, 1, 2, 6, 7],               # 0 Suburbs
+	[11, 14, 10, 8, 18, 28],       # 1 Downtown
+	[15, 16, 7, 5, 10],            # 2 Industrial
+	[17, 2, 11, 12, 3, 28, 29],    # 3 Tourist Strip
+	[16, 15, 4, 1, 2],             # 4 Harbor
+	[1, 0, 16, 20, 13],            # 5 Slums
+	[10, 5, 9, 8, 7],              # 6 Tech Quarter
+	[4, 1, 13, 19, 17, 15, 20],    # 7 Market District
+	[3, 2, 12, 17, 11, 28],        # 8 Beachfront
+	[19, 18, 4, 14, 17, 29],       # 9 Old Town
 ]
 
 const ATM_DISTRICT_IDS: Array = [5, 6, 8]
@@ -92,6 +92,8 @@ const ITEM_SHOP_TYPES: Dictionary = {
 	18: "Bookshop",           # BOOK            — consumes RAW_MATERIAL
 	19: "Antique Shop",       # ANTIQUE         — needs Bank service
 	20: "Pawn Shop",          # FAKE_ID         — gray-market, same building as scrap
+	28: "Cocktail Lounge",   # COCKTAIL        — consumes FOOD_INGREDIENT
+	29: "Fine Dining",       # FINE_DINING     — consumes FOOD_INGREDIENT + Bank
 }
 
 # ── NPC role names per [district_id][npc_type] ─────────────────────────────
@@ -293,9 +295,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 1 — Downtown
 	{"biz_types": ["Office Tower", "Law Firm", "Bank", "Hotel",
-					 "Restaurant", "Boutique", "Gallery", "Insurance Co.", "Flat", "Estate Agency"],
+					 "Restaurant", "Boutique", "Gallery", "Insurance Co.", "Flat", "Estate Agency", "Fine Dining"],
 	  "prop_types": ["Office", "Office", "Financial", "Hotel",
-					 "Commercial", "Retail", "Cultural", "Financial", "Residential", "Office"],
+					 "Commercial", "Retail", "Cultural", "Financial", "Residential", "Office", "Commercial"],
 	  "prefixes": ["Central", "Metro", "Premier", "Elite", "Grand", "City",
 					 "Urban", "Apex", "Pinnacle", "Meridian"],
 	  "price_lo": 200000, "price_hi": 800000,
@@ -315,9 +317,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 3 — Tourist Strip
 	{"biz_types": ["Casino", "Nightclub", "Hotel", "Bar",
-					 "Souvenir Shop", "Arcade", "Lounge", "Show Venue", "Flat"],
+					 "Souvenir Shop", "Arcade", "Lounge", "Show Venue", "Flat", "Cocktail Lounge", "Fine Dining"],
 	  "prop_types": ["Entertainment", "Entertainment", "Hotel", "Commercial",
-					 "Retail", "Entertainment", "Commercial", "Entertainment", "Residential"],
+					 "Retail", "Entertainment", "Commercial", "Entertainment", "Residential", "Commercial", "Commercial"],
 	  "prefixes": ["Neon", "Lucky", "Golden", "Vegas", "Strip", "Glitter",
 					 "Sunset", "Electric", "Dazzle", "Jackpot"],
 	  "price_lo": 80000, "price_hi": 300000,
@@ -370,9 +372,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 8 — Beachfront
 	{"biz_types": ["Beach Bar", "Resort", "Surf Shop", "Ice Cream Parlour",
-					 "Tourist Hotel", "Dive School", "Beachside Cafe", "Sunbed Rental"],
+					 "Tourist Hotel", "Dive School", "Beachside Cafe", "Sunbed Rental", "Cocktail Lounge"],
 	  "prop_types": ["Commercial", "Hotel", "Retail", "Commercial",
-					 "Hotel", "Commercial", "Commercial", "Commercial"],
+					 "Hotel", "Commercial", "Commercial", "Commercial", "Commercial"],
 	  "prefixes": ["Sunny", "Blue", "Wave", "Palm", "Coral",
 					 "Breeze", "Sandy", "Reef", "Lagoon", "Horizon"],
 	  "price_lo": 60000, "price_hi": 250000,
@@ -381,9 +383,9 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "abandon_chance": 0.00},
 	# 9 — Old Town
 	{"biz_types": ["Antique Shop", "Guild Hall", "Manor House", "Inn",
-					 "Cobbler", "Jewellers", "Apothecary", "Bookshop", "Estate Agency"],
+					 "Cobbler", "Jewellers", "Apothecary", "Bookshop", "Estate Agency", "Fine Dining"],
 	  "prop_types": ["Retail", "Cultural", "Residential", "Hotel",
-					 "Commercial", "Retail", "Commercial", "Retail", "Office"],
+					 "Commercial", "Retail", "Commercial", "Retail", "Office", "Commercial"],
 	  "prefixes": ["Old", "Ancient", "Royal", "Grand", "Stone",
 					 "Gilded", "Cobbled", "Ivory", "Raven", "Crimson"],
 	  "price_lo": 45000, "price_hi": 160000,

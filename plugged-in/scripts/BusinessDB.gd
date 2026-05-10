@@ -148,7 +148,9 @@ func _build_recipes() -> void:
 		"Tourist Hotel":      _r({I.FINANCIAL_SERVICE: 1},  {},                              5, ["Bank"],           "hospitality", "mid"),
 		"Resort":             _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 4}, {},         8, ["Bank"],           "hospitality", "mid"),
 		"Inn":                _r({I.FOOD_INGREDIENT: 2, I.FINANCIAL_SERVICE: 1}, {},         3, ["Bank"],           "hospitality", "mid"),
-		"Lounge":             _r({I.FOOD_INGREDIENT: 1},    {I.BEER: 3},                     3, [],                "hospitality", "low"),
+		"Lounge":             _r({I.FOOD_INGREDIENT: 2},    {I.COCKTAIL: 3},                     3, [],                "hospitality", "mid"),
+		"Cocktail Lounge":    _r({I.FOOD_INGREDIENT: 3},    {I.COCKTAIL: 4},                     3, [],                "hospitality", "mid"),
+		"Fine Dining":        _r({I.FOOD_INGREDIENT: 5},    {I.FINE_DINING: 3},                  5, ["Bank"],           "hospitality", "high"),
 
 		# ── Entertainment ─────────────────────────────────────────────────────
 		"Casino":             _r({I.FINANCIAL_SERVICE: 2},  {},                              8, ["Bank", "Law Firm"],"entertainment","mid"),

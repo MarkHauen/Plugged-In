@@ -193,6 +193,7 @@ func run_night_tick() -> void:
 		if npc.home_meta.is_empty():
 			_assign_tourist_hotel(npc, hotels)
 
+	_cull_overstaffed_jobs()
 	_tick_rent_pressure()
 
 
@@ -280,8 +281,14 @@ func _assign_job(npc: NPC, employers: Dictionary) -> void:
 	for meta: Dictionary in raw:
 		var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
 		var cap: int = int(recipe.get("employees", 0))
-		if int(meta.get("_employee_count", 0)) < cap:
-			candidates.append(meta)
+		if int(meta.get("_employee_count", 0)) >= cap:
+			continue
+		# Financial gate: employer must have at least 7 days of this NPC's wage in
+		# reserve, otherwise it's hiring money it doesn't have.
+		var wage_per_emp: float = float(meta.get("wages_per_day", 0.0)) / float(max(cap, 1))
+		if float(meta.get("cash_reserves", 0.0)) < wage_per_emp * 7.0:
+			continue
+		candidates.append(meta)
 	if candidates.is_empty():
 		return
 	var best: Dictionary = _nearest(candidates, npc.position)
@@ -291,17 +298,22 @@ func _assign_job(npc: NPC, employers: Dictionary) -> void:
 
 
 func _assign_job_to(npc: NPC, meta: Dictionary) -> void:
-	npc.employer_meta = meta
 	var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
 	var max_employees: int = max(int(recipe.get("employees", 1)), 1)
+	# Hard cap: never exceed the recipe headcount — guards against upgrade-race overflow.
+	if int(meta.get("_employee_count", 0)) >= max_employees:
+		return
+	npc.employer_meta = meta
 	var wages_total: float = float(meta.get("wages_per_day", BusinessDB.wages_for(meta)))
 	npc.daily_wage = wages_total / float(max_employees)
 	meta["_employee_count"] = int(meta.get("_employee_count", 0)) + 1
 	npc.days_unemployed = 0
+	npc.log_event("Hired @ %s ($%.0f/day)" % [meta.get("biz_name", "?"), npc.daily_wage])
 
 
 func _release_job(npc: NPC) -> void:
 	if not npc.employer_meta.is_empty():
+		npc.log_event("Left job @ %s" % npc.employer_meta.get("biz_name", "?"))
 		npc.employer_meta["_employee_count"] = \
 			max(0, int(npc.employer_meta.get("_employee_count", 0)) - 1)
 	npc.employer_meta = {}
@@ -315,6 +327,9 @@ func _try_upgrade_job(npc: NPC, employers: Dictionary) -> void:
 			continue
 		var recipe:        Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
 		var max_employees: int       = max(int(recipe.get("employees", 1)), 1)
+		# Must have a free slot — prevents multiple NPCs racing into the same opening.
+		if int(meta.get("_employee_count", 0)) >= max_employees:
+			continue
 		var wages_total:   float     = float(meta.get("wages_per_day", BusinessDB.wages_for(meta)))
 		var new_wage:      float     = wages_total / float(max_employees)
 		if new_wage >= npc.daily_wage * UPGRADE_WAGE_THRESHOLD:
@@ -352,6 +367,7 @@ func _assign_home_to(npc: NPC, meta: Dictionary) -> void:
 	npc.daily_rent = float(meta.get("rent_per_day", 8.0)) / float(cap)
 	meta["_tenant_count"] = int(meta.get("_tenant_count", 0)) + 1
 	npc.days_unhoused = 0
+	npc.log_event("Moved to %s ($%.0f/day rent)" % [meta.get("biz_name", "?"), npc.daily_rent])
 
 
 ## Assign a tourist to their nearest available hotel.
@@ -369,6 +385,7 @@ func _assign_tourist_hotel(npc: NPC, hotels: Dictionary) -> void:
 
 func _release_home(npc: NPC) -> void:
 	if not npc.home_meta.is_empty():
+		npc.log_event("Lost home @ %s" % npc.home_meta.get("biz_name", "?"))
 		npc.home_meta["_tenant_count"] = \
 			max(0, int(npc.home_meta.get("_tenant_count", 0)) - 1)
 	npc.home_meta  = {}
@@ -422,6 +439,25 @@ func _all_candidates(index: Dictionary) -> Array:
 	for key: int in index.keys():
 		result.append_array(index[key] as Array)
 	return result
+
+
+## Release any NPCs whose employer has more staff than the recipe allows.
+## Runs each night to self-correct historic over-hiring (e.g. from upgrade races).
+## _release_job decrements _employee_count, so the loop naturally stops releasing
+## once a building is back at or below its cap.
+func _cull_overstaffed_jobs() -> void:
+	for npc_node in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.CIVILIAN or npc.employer_meta.is_empty():
+			continue
+		var meta: Dictionary = npc.employer_meta
+		var recipe: Dictionary = BusinessDB.get_recipe(meta.get("biz_type", ""))
+		var cap: int = int(recipe.get("employees", 0))
+		# Release this NPC if the building is over its recipe cap.
+		if cap <= 0 or int(meta.get("_employee_count", 0)) > cap:
+			_release_job(npc)
 
 
 # =============================================================================

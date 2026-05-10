@@ -13,9 +13,19 @@ extends RefCounted
 
 class_name EconomyTicker
 
-## Daily property tax as a fraction of a building's market price.
-## 0.0001 = 0.01% per day ≈ 3.65% annually.
-const PROPERTY_TAX_RATE: float = 0.0001
+## Daily wage paid from city treasury to each police officer.
+const POLICE_DAILY_WAGE:       float = 80.0
+## Fixed daily infrastructure / road-maintenance cost charged to the city treasury.
+const ROAD_MAINTENANCE_PER_DAY: float = 100.0
+## Treasury cushion the dynamic tax rate aims to maintain.
+const GOVT_RESERVE_TARGET:     float = 2000.0
+## Minimum tax rate — charged even when the city is flush (keeps buildings
+## skin-in-the-game and prevents zero-tax edge cases).
+const GOVT_TAX_MIN_RATE:       float = 0.000025   # ≈ 0.9 % annually
+## Hard ceiling so no single night's tax bill can bankrupt a building.
+const GOVT_TAX_MAX_RATE:       float = 0.008      # ≈ 292 % annually (emergency)
+## Fraction of any treasury shortfall to recover per day (smooth ramp-up).
+const GOVT_DEFICIT_CATCHUP:    float = 0.25
 ## Flat cash payment given each NIGHT to civilians who are unhoused or struggling.
 const WELFARE_PAYMENT:      float = 25.0
 ## City treasury must hold at least this much before welfare is disbursed.
@@ -24,7 +34,9 @@ var _all_bldg_metas: Array   # every building's meta Dictionary, shared with Cit
 var _all_npcs:       Array   # every live NPC node, shared with City.gd
 var _landowners:     Array   # landowner Dictionaries: { cash, income_per_day, owned_buildings, … }
 var _job_market:     JobMarket
-var city_treasury:   float = 0.0   # accumulates property taxes; readable by UI
+var city_treasury:         float = 0.0     # accumulates property taxes; readable by UI
+var _effective_tax_rate:   float = 0.0001  # recomputed each NIGHT; readable by UI
+var _last_welfare_paid:    float = 0.0     # welfare paid last NIGHT cycle (for tax estimate)
 
 
 func _init(all_bldg_metas: Array, all_npcs: Array, landowners: Array,
@@ -41,6 +53,10 @@ func _init(all_bldg_metas: Array, all_npcs: Array, landowners: Array,
 func on_economy_day_started(_day: int) -> void:
 	for owner: Dictionary in _landowners:
 		owner["income_per_day"] = 0.0
+	# Snapshot each NPC's opening balance for sparkline history.
+	for npc_node: NPC in _all_npcs:
+		if is_instance_valid(npc_node):
+			(npc_node as NPC).record_daily_snapshot()
 
 
 ## Called on EconomyManager.phase_changed signal.
@@ -53,9 +69,26 @@ func on_economy_phase_changed(phase: int) -> void:
 
 # =============================================================================
 #  DAWN — wages flow from employer cash reserves into each NPC's balance.
-#         If an employer can't pay it goes operational=false (suspended).
+#         Police officers are city employees: their wages come from treasury.
+#         If a civilian employer can't pay it goes operational=false.
 # =============================================================================
 func _tick_dawn() -> void:
+	# ── Police: city pays wages from treasury ──────────────────────────────
+	for npc_node: NPC in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.POLICE:
+			continue
+		# Initialise wage on first DAWN if not already set.
+		if npc.daily_wage == 0.0:
+			npc.daily_wage = POLICE_DAILY_WAGE
+		if city_treasury >= npc.daily_wage:
+			city_treasury  -= npc.daily_wage
+			npc.balance    += npc.daily_wage
+		# If treasury is dry the officer still works; back-pay is not modelled.
+
+	# ── Civilians: employer pays wages from business cash reserves ──────────
 	for npc_node: NPC in _all_npcs:
 		if not is_instance_valid(npc_node):
 			continue
@@ -95,6 +128,9 @@ func _tick_noon() -> void:
 
 	# B2B trade: move goods from output buffers into buyers' input buffers.
 	_run_market_board()
+	# Background consumer spending: each civilian makes one routine purchase
+	# without requiring physical pathfinding.
+	_daily_consumption_tick()
 
 
 ## Attempt one production cycle for a single building.
@@ -135,7 +171,9 @@ func _try_produce(meta: Dictionary, available_services: Dictionary) -> void:
 func _tick_night() -> void:
 	_harbor_restock()
 	_update_building_wages()
+	_compute_tax_rate()           # must come before tax collection
 	_collect_property_taxes()
+	_pay_infrastructure_costs()   # deduct road/maintenance from fresh tax revenue
 	_collect_building_rent()
 	_check_property_management()
 	_recover_suspended_buildings()
@@ -144,13 +182,52 @@ func _tick_night() -> void:
 	_job_market.run_night_tick()
 
 
+## Recompute _effective_tax_rate so it covers tonight's estimated government
+## expenses.  Called once per NIGHT, before _collect_property_taxes().
+##
+## The rate is proportional to total taxable property value so larger buildings
+## pay more.  A deficit-catchup term ramps the rate higher whenever the treasury
+## balance falls below GOVT_RESERVE_TARGET.
+func _compute_tax_rate() -> void:
+	# ── Tally expected government costs ───────────────────────────────────
+	var police_cost: float = 0.0
+	for npc_node: NPC in _all_npcs:
+		if is_instance_valid(npc_node):
+			var npc := npc_node as NPC
+			if npc.npc_type == NPC.Type.POLICE:
+				police_cost += POLICE_DAILY_WAGE
+
+	# Use last night's welfare tally as a proxy for tonight's expected payout.
+	var est_cost: float = police_cost + _last_welfare_paid + ROAD_MAINTENANCE_PER_DAY
+
+	# ── Deficit-recovery levy ──────────────────────────────────────────────
+	var deficit: float  = maxf(0.0, GOVT_RESERVE_TARGET - city_treasury)
+	var target:  float  = est_cost + deficit * GOVT_DEFICIT_CATCHUP
+
+	# ── Spread across total taxable property value ────────────────────────
+	var total_value: float = 0.0
+	for meta: Dictionary in _all_bldg_metas:
+		if meta.get("status", "") != "abandoned":
+			total_value += float(meta.get("price", 0))
+
+	if total_value > 0.0:
+		_effective_tax_rate = clampf(target / total_value,
+									GOVT_TAX_MIN_RATE, GOVT_TAX_MAX_RATE)
+
+
+## Deduct fixed infrastructure costs from the city treasury.  Called right
+## after tax collection so the treasury has been freshly topped up.
+func _pay_infrastructure_costs() -> void:
+	city_treasury = maxf(0.0, city_treasury - ROAD_MAINTENANCE_PER_DAY)
+
+
 ## Deduct property tax from every non-abandoned building and credit the city treasury.
-## Tax is based on the building's market price, so prime real estate pays more.
+## Tax is based on the building's market price, scaled by _effective_tax_rate.
 func _collect_property_taxes() -> void:
 	for meta: Dictionary in _all_bldg_metas:
 		if meta.get("status", "") == "abandoned":
 			continue
-		var tax: float = float(meta.get("price", 0)) * PROPERTY_TAX_RATE
+		var tax: float = float(meta.get("price", 0)) * _effective_tax_rate
 		if tax <= 0.0:
 			continue
 		var reserves: float = float(meta.get("cash_reserves", 0.0))
@@ -234,12 +311,13 @@ func _recover_suspended_buildings() -> void:
 			meta["operational"] = true
 
 
-## Advance per-NPC overnight state: pay rent, tick hunger, evict stale tourists.
+## Advance per-NPC overnight state: pay rent, tick hunger, tick happiness, evict stale tourists.
 func _tick_night_npcs() -> void:
 	for npc_node: NPC in _all_npcs:
 		if is_instance_valid(npc_node):
 			(npc_node as NPC).pay_rent()
 			(npc_node as NPC).tick_hunger()
+			(npc_node as NPC).tick_happy()
 	_cull_tourists()
 
 
@@ -269,6 +347,7 @@ func _cull_tourists() -> void:
 #  Funded from city_treasury; payments stop when the treasury runs low.
 # =============================================================================
 func _pay_welfare() -> void:
+	_last_welfare_paid = 0.0   # reset tally for tonight's pass
 	if city_treasury < WELFARE_TREASURY_MIN:
 		return
 	for npc_node: NPC in _all_npcs:
@@ -285,8 +364,238 @@ func _pay_welfare() -> void:
 		if city_treasury < WELFARE_TREASURY_MIN:
 			break   # treasury drained mid-pass — stop paying
 		npc.balance     += WELFARE_PAYMENT
+		npc.log_event("Welfare +$%.0f  -> $%.0f" % [WELFARE_PAYMENT, npc.balance])
+		_last_welfare_paid += WELFARE_PAYMENT
 		city_treasury   -= WELFARE_PAYMENT
 		npc._update_struggling_tint()
+
+
+# =============================================================================
+#  DAILY CONSUMPTION — each civilian makes one background purchase per NOON tick
+#  (coffee, lunch, drinks) without requiring physical pathfinding.  This decouples
+#  routine consumer spending from walk-time, keeping money circulating even when
+#  NPCs are mid-path or idling far from shops.
+# =============================================================================
+func _daily_consumption_tick() -> void:
+	# Compute the top-15% wage threshold so high earners can be identified cheaply.
+	var wages: Array = []
+	for npc_node: NPC in _all_npcs:
+		if is_instance_valid(npc_node):
+			var npc := npc_node as NPC
+			if npc.npc_type == NPC.Type.CIVILIAN and npc.daily_wage > 0.0:
+				wages.append(npc.daily_wage)
+	wages.sort()
+	var top15_threshold: float = 0.0
+	if wages.size() > 0:
+		var cutoff_idx: int = int(float(wages.size()) * 0.85)
+		top15_threshold = float(wages[mini(cutoff_idx, wages.size() - 1)])
+	# Build a retail supply snapshot: item_id → Array of building metas with stock.
+	var supply: Dictionary = {}
+	for meta: Dictionary in _all_bldg_metas:
+		if not meta.get("operational", false):
+			continue
+		var obuf := meta["output_buffer"] as Dictionary
+		for item_id: int in obuf.keys():
+			if int(obuf.get(item_id, 0)) <= 0:
+				continue
+			if ItemDB.is_intermediate(item_id):
+				continue   # B2B goods only; skip retail pass
+			if not supply.has(item_id):
+				supply[item_id] = []
+			(supply[item_id] as Array).append(meta)
+
+	for npc_node: NPC in _all_npcs:
+		if not is_instance_valid(npc_node):
+			continue
+		var npc := npc_node as NPC
+		if npc.npc_type != NPC.Type.CIVILIAN:
+			continue
+
+		var is_hungry: bool = npc.hunger >= NPC.HUNGER_THRESHOLD
+
+		if is_hungry:
+			# Hunger is a need — buy food whenever the NPC has any money at all.
+			# No random gate, no rent-cushion gate.
+			if npc.balance < 0.50:
+				continue   # literally cannot afford anything
+			# fall through to purchase attempt
+		else:
+			# Not hungry — discretionary spending only.
+			# Require a cushion so wants-purchases don't crowd out upcoming bills.
+			if npc.balance < npc.daily_rent * 2.5:
+				continue
+			# 55 % chance of a discretionary purchase each noon tick.
+			if randf() > 0.55:
+				continue
+
+		var item_id: int = _pick_daily_item(npc, supply)
+		if item_id < 0 or not supply.has(item_id):
+			continue
+
+		# Find the nearest stocked provider.
+		var best_meta: Dictionary = {}
+		var best_dist: float = INF
+		for meta: Dictionary in (supply[item_id] as Array):
+			var qty_left: int = int((meta["output_buffer"] as Dictionary).get(item_id, 0))
+			if qty_left <= 0:
+				continue
+			var d: float = npc.position.distance_to(meta.get("_world_pos", Vector2.ZERO))
+			if d < best_dist:
+				best_dist = d
+				best_meta = meta
+		if best_meta.is_empty():
+			continue
+
+		var price: float = float(best_meta.get("sell_price", ItemDB.get_base_price(item_id)))
+		if npc.balance < price:
+			continue
+
+		# Transfer stock and cash.
+		var obuf := best_meta["output_buffer"] as Dictionary
+		var qty: int = int(obuf.get(item_id, 0))
+		if qty <= 1:
+			obuf.erase(item_id)
+		else:
+			obuf[item_id] = qty - 1
+		best_meta["cash_reserves"] = float(best_meta.get("cash_reserves", 0.0)) + price
+		npc.balance -= price
+
+		# Apply hunger / happiness side-effects.
+		if item_id in [0, 1, 2, 3]:   # COFFEE, STREET_FOOD, BEER, ICE_CREAM
+			npc.hunger = maxf(0.0, npc.hunger - 0.25)
+		if item_id in [28, 29]:   # COCKTAIL, FINE_DINING
+			npc.happy = minf(1.0, npc.happy + 0.30)
+			npc._update_unhappy_tint()
+		elif item_id in [2, 3]:   # BEER, ICE_CREAM
+			npc.happy = minf(1.0, npc.happy + 0.08)
+		npc._update_struggling_tint()
+
+		# Rich NPCs make a second purchase for food, ensuring they always eat
+		# well on top of any consumer goods spend.
+		var is_rich: bool = npc.daily_wage > 0.0 and npc.balance > npc.daily_wage * 30.0
+		if is_rich and item_id not in [0, 1, 2, 3, 28, 29]:
+			var food_ids: Array = [28, 29, 0, 1, 3]   # prefer luxury food then basics
+			food_ids.shuffle()
+			for fid: int in food_ids:
+				if not supply.has(fid):
+					continue
+				var fprice: float = float(ItemDB.get_base_price(fid))
+				if npc.balance < fprice:
+					continue
+				var fbest: Dictionary = {}
+				var fdist: float = INF
+				for fmeta: Dictionary in (supply[fid] as Array):
+					var fqty: int = int((fmeta["output_buffer"] as Dictionary).get(fid, 0))
+					if fqty <= 0:
+						continue
+					var fd: float = npc.position.distance_to(fmeta.get("_world_pos", Vector2.ZERO))
+					if fd < fdist:
+						fdist = fd
+						fbest = fmeta
+				if fbest.is_empty():
+					continue
+				var fobuf := fbest["output_buffer"] as Dictionary
+				var fqty2: int = int(fobuf.get(fid, 0))
+				if fqty2 <= 1:
+					fobuf.erase(fid)
+				else:
+					fobuf[fid] = fqty2 - 1
+				fbest["cash_reserves"] = float(fbest.get("cash_reserves", 0.0)) + fprice
+				npc.balance -= fprice
+				if fid in [28, 29]:
+					npc.happy = minf(1.0, npc.happy + 0.30)
+					npc._update_unhappy_tint()
+				elif fid in [0, 1, 2, 3]:
+					npc.hunger = maxf(0.0, npc.hunger - 0.25)
+				npc._update_struggling_tint()
+				break
+
+		# Top-15% wage earners get a guaranteed extra consumer-goods spend —
+		# no random gate.  This represents lifestyle spending that high-earners
+		# make regardless of mood (subscriptions, gadgets, fashion, eating out).
+		if top15_threshold > 0.0 and npc.daily_wage >= top15_threshold \
+				and npc.balance > npc.daily_rent * 5.0:
+			# Prefer premium items; fall back to any available retail good.
+			var elite_ids: Array = [29, 28, 14, 11, 10, 8, 13, 19, 12, 18, 17, 3, 2]
+			elite_ids.shuffle()
+			for eid: int in elite_ids:
+				if not supply.has(eid):
+					continue
+				var eprice: float = float(ItemDB.get_base_price(eid))
+				if npc.balance < eprice:
+					continue
+				var ebest: Dictionary = {}
+				var edist: float = INF
+				for emeta: Dictionary in (supply[eid] as Array):
+					var eqty: int = int((emeta["output_buffer"] as Dictionary).get(eid, 0))
+					if eqty <= 0:
+						continue
+					var ed: float = npc.position.distance_to(emeta.get("_world_pos", Vector2.ZERO))
+					if ed < edist:
+						edist = ed
+						ebest = emeta
+				if ebest.is_empty():
+					continue
+				var eobuf := ebest["output_buffer"] as Dictionary
+				var eqty2: int = int(eobuf.get(eid, 0))
+				if eqty2 <= 1:
+					eobuf.erase(eid)
+				else:
+					eobuf[eid] = eqty2 - 1
+				ebest["cash_reserves"] = float(ebest.get("cash_reserves", 0.0)) + eprice
+				npc.balance -= eprice
+				if eid in [28, 29]:
+					npc.happy = minf(1.0, npc.happy + 0.30)
+					npc._update_unhappy_tint()
+				elif eid in [2, 3]:
+					npc.happy = minf(1.0, npc.happy + 0.08)
+				npc._update_struggling_tint()
+				break
+
+
+## Choose the best item for an NPC to buy as a daily routine purchase.
+## Wealth tier logic:
+##   - Everyone prioritises hunger relief.
+##   - Rich NPCs (>30 days wages saved) get a consumer goods purchase AND a food purchase.
+##   - Unhappy NPCs seek luxury food to lift happiness.
+##   - Everyone else grabs a routine treat.
+func _pick_daily_item(npc: NPC, supply: Dictionary) -> int:
+	# Wealth threshold: "rich" = more than 30 days of wage banked.
+	var is_rich: bool = npc.daily_wage > 0.0 and npc.balance > npc.daily_wage * 30.0
+
+	# 1. Hunger relief — always highest priority.
+	if npc.hunger >= NPC.HUNGER_THRESHOLD:
+		var food_ids: Array = [1, 0, 3, 2]   # STREET_FOOD, COFFEE, ICE_CREAM, BEER
+		food_ids.shuffle()
+		for id: int in food_ids:
+			if supply.has(id):
+				return id
+
+	# 2. Rich NPCs: consumer goods purchase first (the food purchase comes after
+	#    via the second slot in _daily_consumption_tick's rich branch).
+	if is_rich:
+		# Shuffle across electronics, clothing, collectibles, bags, cameras, etc.
+		var consumer_ids: Array = [8, 10, 11, 12, 13, 14, 17, 18, 19, 28, 29]
+		consumer_ids.shuffle()
+		for id: int in consumer_ids:
+			if supply.has(id) and ItemDB.get_base_price(id) <= int(npc.balance * 0.15):
+				return id
+
+	# 3. Happiness boost — when unhappy and not stretched financially.
+	if npc.happy < NPC.HAPPY_THRESHOLD and npc.balance > npc.daily_rent * 4.0:
+		var luxury_ids: Array = [28, 29, 2, 3]   # COCKTAIL, FINE_DINING, BEER, ICE_CREAM
+		luxury_ids.shuffle()
+		for id: int in luxury_ids:
+			if supply.has(id):
+				return id
+
+	# 4. Routine treat — coffee, snack, or a cold one.
+	var routine_ids: Array = [0, 1, 3, 2]   # COFFEE, STREET_FOOD, ICE_CREAM, BEER
+	routine_ids.shuffle()
+	for id: int in routine_ids:
+		if supply.has(id):
+			return id
+	return -1
 
 
 # =============================================================================

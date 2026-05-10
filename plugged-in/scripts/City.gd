@@ -10,12 +10,14 @@ const BUILDING_INFO_UI_S := preload("res://scripts/ui/BuildingInfoUI.gd")
 const RoadGraphScript := preload("res://scripts/world/RoadGraph.gd")
 const NPCDataViewScript := preload("res://scripts/ui/NPCDataView.gd")
 const EconDataViewScript := preload("res://scripts/ui/EconDataView.gd")
+const TrendViewScript    := preload("res://scripts/ui/TrendView.gd")
 const DistrictGeneratorScript := preload("res://scripts/world/DistrictGenerator.gd")
 const LandownerSystemScript := preload("res://scripts/world/LandownerSystem.gd")
 const NPCSpawnerScript := preload("res://scripts/npc/NPCSpawner.gd")
 const EconomyTickerScript := preload("res://scripts/economy/EconomyTicker.gd")
 const JobMarketScript := preload("res://scripts/economy/JobMarket.gd")
 const DebugOverlayScript := preload("res://scripts/ui/DebugOverlay.gd")
+const ClockUIScript      := preload("res://scripts/ui/ClockUI.gd")
 
 
 # -- Shared runtime state ----------------------------------------------------
@@ -36,6 +38,8 @@ var _job_market: JobMarket
 var _debug_overlay: DebugOverlay
 var _npc_view: NPCDataView = null
 var _econ_view: EconDataView = null
+var _trend_view: TrendView = null
+var _clock_ui: CanvasLayer = null
 
 # -- Layer nodes -------------------------------------------------------------
 var _highway_layer: Node2D = null
@@ -46,6 +50,9 @@ func _ready() -> void:
 # UI and layer containers
 	_building_info_ui = BUILDING_INFO_UI_S.new()
 	add_child(_building_info_ui)
+
+	_clock_ui = ClockUIScript.new()
+	add_child(_clock_ui)
 	_building_info_ui.set_player($Player)
 
 	_highway_layer = Node2D.new()
@@ -83,15 +90,15 @@ func _ready() -> void:
 	_district_generator._npc_spawner = _npc_spawner
 	_district_generator.generate_all_districts()
 
-	# Road graph
-	_road_graph = RoadGraphScript.new()
-	_road_graph.build(WorldData.HIGHWAYS)
-	_road_graph.build_districts(WorldData.DISTRICTS)
-
 	# Debug overlay
 	_debug_overlay = DebugOverlayScript.new(self , _debug_layer, _highway_layer)
 	_debug_overlay.build_npc_info_ui()
 	WorldRenderer.draw_road_nodes(_road_graph, _debug_layer)
+
+	# Road graph
+	_road_graph = RoadGraphScript.new()
+	_road_graph.build(WorldData.HIGHWAYS)
+	_road_graph.build_districts(WorldData.DISTRICTS)
 
 	# NPC init
 	_npc_spawner.spawn_highway_patrols()
@@ -105,6 +112,11 @@ func _ready() -> void:
 	_econ_view = EconDataViewScript.new()
 	add_child(_econ_view)
 	_econ_view.setup(_all_bldg_metas)
+
+	_trend_view = TrendViewScript.new()
+	add_child(_trend_view)
+	_trend_view.setup(_all_bldg_metas)
+	_trend_view.setup_npcs(_all_npcs)
 
 	# Island collision + camera
 	WorldRenderer.build_island_boundary(self )
@@ -125,6 +137,7 @@ func _ready() -> void:
 	EconomyManager.phase_changed.connect(_economy_ticker.on_economy_phase_changed)
 	EconomyManager.day_started.connect(_economy_ticker.on_economy_day_started)
 	EconomyManager.day_started.connect(_on_day_started)
+	EconomyManager.day_started.connect(_trend_view.record_snapshot)
 
 	# Initial tourist batch
 	_npc_spawner.spawn_tourists(randi() % 4 + 3)
@@ -147,9 +160,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_npc_view.toggle()
 		KEY_G:
 			_econ_view.toggle()
+		KEY_T:
+			_trend_view.toggle()
 		KEY_ESCAPE:
 			if _econ_view != null and _econ_view.visible:
 				_econ_view.visible = false
+			elif _trend_view != null and _trend_view.visible:
+				_trend_view.visible = false
 			elif _npc_view != null and _npc_view.visible:
 				_npc_view.visible = false
 			elif _landowner_system.is_inspector_visible():

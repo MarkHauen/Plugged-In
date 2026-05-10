@@ -2,17 +2,17 @@ extends Node
 
 # =============================================================================
 #  EconomyManager — Autoload singleton.
-#  Game clock: 1 day = DAY_SECONDS real seconds, divided into 4 phases of 30 s.
+#  Game clock: 1 day = DAY_SECONDS real seconds, divided into 4 phases of 5 s.
 #
-#  DAWN  (phase 0,  0–30 s):   Wages paid to NPC workers.
-#  NOON  (phase 1, 30–60 s):   Production tick — factories, fisheries, bakeries run.
-#  DUSK  (phase 2, 60–90 s):   Retail/consumption — NPCs buy food and wants.
-#  NIGHT (phase 3, 90–120 s):  Rent collected, property taxes levied, harbour ships arrive.
+#  DAWN  (phase 0,  0–5 s):   Wages paid to NPC workers.
+#  NOON  (phase 1, 5–10 s):   Production tick — factories, fisheries, bakeries run.
+#  DUSK  (phase 2, 10–15 s):   Retail/consumption — NPCs buy food and wants.
+#  NIGHT (phase 3, 15–20 s):  Rent collected, property taxes levied, harbour ships arrive.
 # =============================================================================
 
-const DAY_SECONDS   := 120.0
+const DAY_SECONDS   := 20.0
 const PHASE_COUNT   := 4
-const PHASE_SECONDS := DAY_SECONDS / PHASE_COUNT   # 30.0
+const PHASE_SECONDS := DAY_SECONDS / PHASE_COUNT   # 5.0
 
 enum Phase { DAWN = 0, NOON = 1, DUSK = 2, NIGHT = 3 }
 

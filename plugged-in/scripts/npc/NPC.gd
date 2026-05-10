@@ -64,9 +64,14 @@ var home_meta:      Dictionary = {}      # building meta of NPC's home
 var hunger:         float      = 0.0     # 0–1; triggers food trip when > 0.7
 const HUNGER_RATE      := 0.10   # hunger added per NIGHT tick (fills in ~10 days without food)
 const HUNGER_THRESHOLD := 0.70   # above this → seek food before wants
+var happy:          float      = 1.0     # 1.0 = content, 0.0 = miserable
+const HAPPY_DECAY_RATE  := 0.05   # lost per NIGHT tick (≈20 nights to empty)
+const HAPPY_THRESHOLD   := 0.45   # below this → seek luxury / entertainment
 const STRUGGLING_TINT  := Color(0.90, 0.55, 0.20, 1.0)  # amber — low balance
+const UNHAPPY_TINT     := Color(0.55, 0.72, 1.0,  1.0)  # blue  — low happiness
 const NORMAL_TINT      := Color(1.0,  1.0,  1.0,  1.0)  # reset tint
 var _is_struggling: bool = false   # true when balance < rent; affects shopping
+var _is_unhappy:    bool = false   # true when happy < HAPPY_THRESHOLD
 var _body_poly: Polygon2D = null   # set in _build_visual for tint updates
 
 # ── Employment & housing ─────────────────────────────────────────────────────
@@ -84,6 +89,12 @@ var _roam_wander_pts:  Array     = []   # city-wide road nodes
 var _storefront_registry: Array  = []   # shared Array ref from City.gd
 
 var _name_label: Label = null
+
+# ── Life log & balance history ────────────────────────────────────────────────
+const LOG_MAX          := 80   # rolling cap on life_log entries
+const BALANCE_HIST_MAX := 60   # rolling 60-day balance snapshots
+var life_log:        Array = []   # Array[String]  — dated event entries
+var balance_history: Array = []   # Array[float]   — daily balance at DAWN
 
 
 func _ready() -> void:
@@ -240,6 +251,32 @@ func _try_go_shopping() -> void:
 	if _storefront_registry.is_empty() or _road_graph == null:
 		_idle_timer = randf_range(IDLE_MINS[npc_type], IDLE_MAXS[npc_type])
 		return
+	# Unhappy and can afford luxury → seek happiness items before normal wants.
+	if _is_unhappy and not _is_struggling and balance > daily_rent * 4.0:
+		var luxury_ids: Array = [28, 29]   # COCKTAIL, FINE_DINING
+		luxury_ids.shuffle()
+		for lid: int in luxury_ids:
+			var lux_entry: Dictionary = {}
+			var lux_dist:  float      = INF
+			for entry: Dictionary in _storefront_registry:
+				if entry["item_id"] == lid:
+					var d: float = (entry["pos"] as Vector2).distance_to(position)
+					if d < lux_dist:
+						lux_dist  = d
+						lux_entry = entry
+			if not lux_entry.is_empty():
+				_shop_item = lid
+				_shop_meta = lux_entry["meta"]
+				_shop_pos  = lux_entry["pos"]
+				_path      = _road_graph.find_path(position, _shop_pos)
+				_path_idx  = 1
+				if _path.size() > 1:
+					_behaviour  = Behaviour.GOING_TO_SHOP
+					_move_state = MoveState.MOVING
+					_update_label()
+				else:
+					_idle_timer = randf_range(IDLE_MINS[npc_type], IDLE_MAXS[npc_type])
+				return
 	# Universal demand — Flower is desirable city-wide and only the player stocks it.
 	# Check this first so it can fire regardless of district preferences.
 	var item_id: int
@@ -310,10 +347,17 @@ func _execute_purchase() -> void:
 
 	if sold:
 		balance -= float(price)
+		log_event("Bought %s -$%d  -> $%.0f" % [ItemDB.get_item_name(_shop_item), price, balance])
 		sale_made.emit(ItemDB.get_item_name(_shop_item), price, _shop_pos)
 		# Eating food fully satisfies hunger
 		if _shop_item in [0, 1, 2, 3]:   # COFFEE, STREET_FOOD, BEER, ICE_CREAM
 			hunger = 0.0
+		# Luxury items restore happiness; simple treats give a small lift
+		if _shop_item in [28, 29]:   # COCKTAIL, FINE_DINING
+			happy = minf(1.0, happy + 0.35)
+		elif _shop_item in [2, 3]:   # BEER, ICE_CREAM
+			happy = minf(1.0, happy + 0.10)
+		_update_unhappy_tint()
 		_update_struggling_tint()
 
 	# Always return to wandering after the attempt
@@ -340,7 +384,27 @@ func _update_struggling_tint() -> void:
 	_is_struggling = struggling_now
 	if _body_poly == null:
 		return
-	_body_poly.modulate = STRUGGLING_TINT if _is_struggling else NORMAL_TINT
+	if _is_struggling:
+		_body_poly.modulate = STRUGGLING_TINT
+	elif _is_unhappy:
+		_body_poly.modulate = UNHAPPY_TINT
+	else:
+		_body_poly.modulate = NORMAL_TINT
+
+
+func _update_unhappy_tint() -> void:
+	var unhappy_now: bool = happy < HAPPY_THRESHOLD
+	if unhappy_now == _is_unhappy:
+		return
+	_is_unhappy = unhappy_now
+	if _body_poly == null:
+		return
+	if _is_struggling:
+		_body_poly.modulate = STRUGGLING_TINT
+	elif _is_unhappy:
+		_body_poly.modulate = UNHAPPY_TINT
+	else:
+		_body_poly.modulate = NORMAL_TINT
 
 
 # ── Economic tick callbacks (called by City.gd) ───────────────────────
@@ -350,6 +414,7 @@ func receive_wage() -> void:
 	if npc_type != Type.CIVILIAN or daily_wage <= 0.0:
 		return
 	balance += daily_wage
+	log_event("Wage +$%.0f  -> $%.0f" % [daily_wage, balance])
 	_update_struggling_tint()
 
 
@@ -361,9 +426,11 @@ func pay_rent() -> void:
 	if balance < daily_rent:
 		# Can't afford rent — mark struggling but don't go negative.
 		_is_struggling = true
+		log_event("! Rent skipped — broke ($%.0f)" % balance)
 		_update_struggling_tint()
 		return
 	balance -= daily_rent
+	log_event("Rent -$%.0f  -> $%.0f" % [daily_rent, balance])
 	if not home_meta.is_empty():
 		home_meta["cash_reserves"] = float(home_meta.get("cash_reserves", 0.0)) + daily_rent
 	_update_struggling_tint()
@@ -373,8 +440,50 @@ func pay_rent() -> void:
 func tick_hunger() -> void:
 	if npc_type != Type.CIVILIAN:
 		return
+	var was_hungry: bool = hunger >= HUNGER_THRESHOLD
 	var rate: float = HUNGER_RATE * (1.5 if _is_struggling else 1.0)
 	hunger = minf(1.0, hunger + rate)
+	if hunger >= HUNGER_THRESHOLD and not was_hungry:
+		log_event("Hungry (%.0f%%)" % (hunger * 100.0))
+
+
+## NIGHT: decay happiness; richer NPCs have higher expectations and decay faster.
+func tick_happy() -> void:
+	if npc_type != Type.CIVILIAN:
+		return
+	# Base decay scaled by wealth: 1× at subsistence, up to 2.5× for the very rich.
+	# Wealth ratio = balance / (daily_wage * 30) clamped 0–1, then lerped.
+	var was_unhappy: bool = _is_unhappy
+	var wealth_ratio: float = 0.0
+	if daily_wage > 0.0:
+		wealth_ratio = clampf(balance / (daily_wage * 30.0), 0.0, 1.0)
+	var rate: float = HAPPY_DECAY_RATE * lerp(1.0, 2.5, wealth_ratio)
+	happy = maxf(0.0, happy - rate)
+	_update_unhappy_tint()
+	if _is_unhappy and not was_unhappy:
+		log_event("Unhappy (%.0f%%)" % (happy * 100.0))
+	elif not _is_unhappy and was_unhappy:
+		log_event("Mood recovered (%.0f%%)" % (happy * 100.0))
+
+
+## Append a day-stamped entry to the life log.  Capped at LOG_MAX entries.
+## Non-civilians are silently ignored.
+func log_event(text: String) -> void:
+	if npc_type != Type.CIVILIAN:
+		return
+	life_log.append("D%-3d  %s" % [EconomyManager.day, text])
+	if life_log.size() > LOG_MAX:
+		life_log.pop_front()
+
+
+## Record today's opening balance for the sparkline graph.
+## Called by EconomyTicker at the start of each day (before wages are paid).
+func record_daily_snapshot() -> void:
+	if npc_type != Type.CIVILIAN:
+		return
+	balance_history.append(balance)
+	if balance_history.size() > BALANCE_HIST_MAX:
+		balance_history.pop_front()
 
 
 # ── Visual ────────────────────────────────────────────────────────────────────
