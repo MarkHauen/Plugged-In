@@ -14,8 +14,9 @@ const TrendViewScript    := preload("res://scripts/ui/TrendView.gd")
 const DistrictGeneratorScript := preload("res://scripts/world/DistrictGenerator.gd")
 const LandownerSystemScript := preload("res://scripts/world/LandownerSystem.gd")
 const NPCSpawnerScript := preload("res://scripts/npc/NPCSpawner.gd")
-const EconomyTickerScript := preload("res://scripts/economy/EconomyTicker.gd")
-const JobMarketScript := preload("res://scripts/economy/JobMarket.gd")
+const EconomyTickerScript  := preload("res://scripts/economy/EconomyTicker.gd")
+const JobMarketScript      := preload("res://scripts/economy/JobMarket.gd")
+const HousingMarketScript  := preload("res://scripts/economy/HousingMarket.gd")
 const DebugOverlayScript := preload("res://scripts/ui/DebugOverlay.gd")
 const ClockUIScript      := preload("res://scripts/ui/ClockUI.gd")
 
@@ -34,7 +35,8 @@ var _landowner_system: LandownerSystem
 var _district_generator: DistrictGenerator
 var _npc_spawner: NPCSpawner
 var _economy_ticker: EconomyTicker
-var _job_market: JobMarket
+var _job_market:     JobMarket
+var _housing_market: HousingMarket
 var _debug_overlay: DebugOverlay
 var _npc_view: NPCDataView = null
 var _econ_view: EconDataView = null
@@ -69,6 +71,7 @@ func _ready() -> void:
 	WorldRenderer.draw_highways(_highway_layer)
 	WorldRenderer.draw_debug_grid(_debug_layer)
 	WorldRenderer.draw_highway_debug_labels(_debug_layer)
+	WorldRenderer.draw_island_vertex_handles(_debug_layer)
 
 # Landowner system
 	_landowner_system = LandownerSystemScript.new(self )
@@ -93,12 +96,12 @@ func _ready() -> void:
 	# Debug overlay
 	_debug_overlay = DebugOverlayScript.new(self , _debug_layer, _highway_layer)
 	_debug_overlay.build_npc_info_ui()
-	WorldRenderer.draw_road_nodes(_road_graph, _debug_layer)
 
 	# Road graph
 	_road_graph = RoadGraphScript.new()
 	_road_graph.build(WorldData.HIGHWAYS)
 	_road_graph.build_districts(WorldData.DISTRICTS)
+	WorldRenderer.draw_road_nodes(_road_graph, _debug_layer)
 
 	# NPC init
 	_npc_spawner.spawn_highway_patrols()
@@ -127,13 +130,14 @@ func _ready() -> void:
 	_debug_layer.visible = _debug_overlay.debug_mode
 
 	# Economy ticker
-	_job_market = JobMarketScript.new(_all_bldg_metas, _all_npcs)
+	_job_market     = JobMarketScript.new(_all_bldg_metas, _all_npcs)
+	_housing_market = HousingMarketScript.new(_all_bldg_metas, _all_npcs)
 	_job_market.assign_initial_jobs()
-	_job_market.assign_initial_homes()
+	_housing_market.assign_initial_homes()
 	_job_market.seed_starting_balances()
 
 	_economy_ticker = EconomyTickerScript.new(
-	_all_bldg_metas, _all_npcs, _landowner_system.landowners, _job_market)
+	_all_bldg_metas, _all_npcs, _landowner_system.landowners, _job_market, _housing_market)
 	EconomyManager.phase_changed.connect(_economy_ticker.on_economy_phase_changed)
 	EconomyManager.day_started.connect(_economy_ticker.on_economy_day_started)
 	EconomyManager.day_started.connect(_on_day_started)
@@ -141,7 +145,7 @@ func _ready() -> void:
 
 	# Initial tourist batch
 	_npc_spawner.spawn_tourists(randi() % 4 + 3)
-	_job_market.assign_tourist_hotels()
+	_housing_market.assign_tourist_hotels()
 	_npc_spawner.init_npc_movement(_road_graph)
 
 	$Player.z_index = 10
@@ -191,7 +195,7 @@ func _on_npc_sale_made(item_name: String, amount: int, _shop_pos: Vector2) -> vo
 func _on_day_started(_day: int) -> void:
 	_landowner_system.reset_daily_income()
 	_npc_spawner.spawn_tourists(randi() % 4 + 2)
-	_job_market.assign_tourist_hotels()
+	_housing_market.assign_tourist_hotels()
 	_npc_spawner.init_npc_movement(_road_graph)
 
 

@@ -40,9 +40,9 @@ static var ISLAND_POLY: PackedVector2Array = PackedVector2Array([
 	Vector2(28500, 8400), Vector2(28200, 12000), Vector2(27300, 15600),
 	Vector2(25800, 18900), Vector2(23100, 21300), Vector2(19200, 22800),
 	Vector2(15000, 23280), Vector2(10800, 23100), Vector2(7200, 22140),
-	Vector2(4500, 19800), Vector2(2700, 16800), Vector2(1740, 12900),
-	Vector2(1560, 8700), Vector2(2040, 5520), Vector2(2580, 3300),
-	Vector2(2850, 2160),
+	Vector2(4500, 19800), Vector2(3040, 16980), Vector2(1800, 16980),
+	Vector2(1800, 14400), Vector2(2500, 14400), Vector2(1740, 12900),
+	Vector2(1560, 8700), Vector2(2040, 5520), Vector2(2400, 4020),
 ])
 
 # ── Ordinal strings ─────────────────────────────────────────────────────────
@@ -108,6 +108,7 @@ const NPC_ROLES: Array = [
 	["Merchant",   "Officer"       ],   # 7 Market District
 	["Vendor",     "Officer"       ],   # 8 Beachfront
 	["Elder",      "Officer"       ],   # 9 Old Town
+	["Visitor",    "Ranger"        ],   # 10 Nature Reserve
 ]
 
 # ── Landowner name pools ────────────────────────────────────────────────────
@@ -183,7 +184,7 @@ const DISTRICTS: Array = [
 					  {"col": 4, "row": 2, "type": "warehouse"}]},
 	{"id": 5, "name": "Slums",
 	  "floor": Color(0.32, 0.28, 0.22), "bldg": Color(0.40, 0.36, 0.28),
-	  "ox": 5500, "oy": 9600, "cols": 5, "rows": 6,
+	  "ox": 5500, "oy": 9600, "cols": 10, "rows": 6,
 	  "police_w": 0.00, "civilian_w": 0.40, "customer_w": 0.60,
 	  "pref": [0, 3], "st_name": "Row", "ave_name": "Alley",
 	  "special_blocks": [{"col": 2, "row": 3, "type": "vacant_lot"}],
@@ -276,6 +277,23 @@ const DISTRICTS: Array = [
 						  {"col": 3, "row": 4, "type": "town_square"}],
 	  "mega_blocks": [{"col": 5, "row": 1, "type": "manor"},
 					  {"col": 1, "row": 6, "type": "manor"}]},
+	{"id": 10, "name": "Nature Reserve",
+	  "floor": Color(0.28, 0.52, 0.20), "bldg": Color(0.36, 0.60, 0.24),
+	  "ox": 14000, "oy": 4000, "cols": 5, "rows": 3,
+	  "police_w": 0.00, "civilian_w": 0.00, "customer_w": 0.00,
+	  "pref": [], "st_name": "Trail", "ave_name": "Path",
+	  "special_blocks": [
+		{"col": 0, "row": 0, "type": "forest"}, {"col": 1, "row": 0, "type": "forest"},
+		{"col": 2, "row": 0, "type": "forest"}, {"col": 3, "row": 0, "type": "forest"},
+		{"col": 4, "row": 0, "type": "forest"},
+		{"col": 0, "row": 1, "type": "forest"}, {"col": 1, "row": 1, "type": "meadow"},
+		{"col": 2, "row": 1, "type": "nature_pond"}, {"col": 3, "row": 1, "type": "meadow"},
+		{"col": 4, "row": 1, "type": "forest"},
+		{"col": 0, "row": 2, "type": "forest"}, {"col": 1, "row": 2, "type": "forest"},
+		{"col": 2, "row": 2, "type": "forest"}, {"col": 3, "row": 2, "type": "forest"},
+		{"col": 4, "row": 2, "type": "forest"},
+	  ],
+	  "mega_blocks": []},
 ]
 
 # =============================================================================
@@ -392,6 +410,14 @@ const DISTRICT_BLDG_CONFIG: Array = [
 	  "income_lo": 350, "income_hi": 1400,
 	  "bldg_size_lo": 0.52, "bldg_size_hi": 0.82,
 	  "abandon_chance": 0.00},
+	# 10 — Nature Reserve (no buildings — all blocks are special)
+	{"biz_types": ["Ranger Station"],
+	  "prop_types": ["Natural"],
+	  "prefixes": ["Wild", "Forest", "Green"],
+	  "price_lo": 0, "price_hi": 1,
+	  "income_lo": 0, "income_hi": 1,
+	  "bldg_size_lo": 0.50, "bldg_size_hi": 0.50,
+	  "abandon_chance": 0.0},
 ]
 
 # =============================================================================
@@ -403,8 +429,8 @@ const HIGHWAYS: Array = [
 	{"x": 12660, "y": 2640,  "w": 540,   "h": 120,  "name": "Downtown → Tourist Strip (E-W)"},
 	{"x": 17580, "y": 2100,  "w": 420,   "h": 120,  "name": "Tourist Strip → Tech Quarter (E-W)"},
 	{"x": 7200,  "y": 5580,  "w": 120,   "h": 4020, "name": "Downtown → Slums (N-S)"},
-	{"x": 12660, "y": 5460,  "w": 1740,  "h": 120,  "name": "Downtown → Market E-W leg"},
-	{"x": 14400, "y": 5460,  "w": 120,   "h": 1740, "name": "Downtown → Market N-S leg"},
+	{"x": 12660, "y": 5460,  "w": 180,  "h": 120,  "name": "Downtown → Market E-W leg"},
+	{"x": 14400, "y": 6060,  "w": 120,   "h": 1140, "name": "Downtown → Market N-S leg"},
 	{"x": 18000, "y": 4800,  "w": 120,   "h": 2400, "name": "Tech Quarter → Market (N-S)"},
 	{"x": 22500, "y": 4800,  "w": 120,   "h": 2400, "name": "Tech Quarter → Old Town (N-S)"},
 	{"x": 22500, "y": 11040, "w": 120,   "h": 10020,"name": "Old Town → South Connector (N-S)"},
@@ -424,4 +450,8 @@ const HIGHWAYS: Array = [
 	{"x": 6000,  "y": 20160, "w": 120,   "h": 900,  "name": "South Coastal Road - BeachFront Connector 1 (N-S)"},
 	{"x": 13000, "y": 20160, "w": 120,   "h": 900,  "name": "South Coastal Road - BeachFront Connector 2 (N-S)"},
 	{"x": 21000, "y": 20160, "w": 120,   "h": 900,  "name": "South Coastal Road - BeachFront Connector 3 (N-S)"},
+	{"x": 12720, "y": 4450,  "w": 1310,  "h": 120,  "name": "Central Spine → Nature Reserve (E-W)"},
+	{"x": 16730, "y": 4870,  "w": 1330,  "h": 120,  "name": "Nature Reserve → Tech Quarter (E-W)"},
+	{"x": 15110, "y": 5290,  "w": 120,  "h": 780,  "name": "Nature Reserve → Central Ring Road N (N-S)"},
+	{"x": 15650, "y": 3630,  "w": 120,  "h": 400,  "name": "Nature Reserve → Market N (N-S)"},
 ]

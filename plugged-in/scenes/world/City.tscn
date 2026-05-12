@@ -1,10 +1,10 @@
-[gd_scene load_steps=3 format=3 uid="uid://c8d2f4h6j1l"]
+[gd_scene format=3 uid="uid://c8d2f4h6j1l"]
 
-[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_PlayerScene"]
-[ext_resource type="Script" path="res://scripts/City.gd" id="2_CityScript"]
+[ext_resource type="PackedScene" uid="uid://b5a1g7k2m1n" path="res://scenes/player/Player.tscn" id="1_PlayerScene"]
+[ext_resource type="Script" uid="uid://dtgj1mb3u62s0" path="res://scripts/City.gd" id="2_CityScript"]
 
-[node name="City" type="Node2D"]
+[node name="City" type="Node2D" unique_id=1017905]
 script = ExtResource("2_CityScript")
 
-[node name="Player" parent="." instance=ExtResource("1_PlayerScene")]
+[node name="Player" parent="." unique_id=533429357 instance=ExtResource("1_PlayerScene")]
 position = Vector2(2940, 1800)

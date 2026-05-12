@@ -22,6 +22,9 @@ const SPECIAL_COLORS: Dictionary = {
 	"port":          Color(0.20, 0.30, 0.40),
 	"market_square": Color(0.72, 0.58, 0.30),
 	"vacant_lot":    Color(0.28, 0.24, 0.18),
+	"forest":        Color(0.18, 0.48, 0.16),
+	"meadow":        Color(0.54, 0.72, 0.28),
+	"nature_pond":   Color(0.26, 0.50, 0.40),
 }
 const SPECIAL_LABELS: Dictionary = {
 	"park":          "Park",
@@ -31,6 +34,9 @@ const SPECIAL_LABELS: Dictionary = {
 	"port":          "Working Port",
 	"market_square": "Market Square",
 	"vacant_lot":    "Vacant Lot",
+	"forest":        "Ancient Forest",
+	"meadow":        "Wildflower Meadow",
+	"nature_pond":   "Forest Pond",
 }
 
 # ── Per-type config for mega blocks ───────────────────────────────────────
@@ -261,8 +267,9 @@ func _spawn_special_block(bx: float, by_: float,
 	_scene_root.add_child(name_lbl)
 
 	var pref: Array = []
-	_npc_spawner.spawn_npc_at(bx + WorldData.BLOCK_W * 0.5, by_ + WorldData.BLOCK_H * 0.5,
-							  did, pref, pw * 0.3, cw, 0.0)
+	if pw + cw > 0.0:
+		_npc_spawner.spawn_npc_at(bx + WorldData.BLOCK_W * 0.5, by_ + WorldData.BLOCK_H * 0.5,
+								  did, pref, pw * 0.3, cw, 0.0)
 
 
 func _draw_special_details(bx: float, by_: float, spec_type: String) -> void:
@@ -325,6 +332,44 @@ func _draw_special_details(bx: float, by_: float, spec_type: String) -> void:
 				var ry: float = by_ + randf() * WorldData.BLOCK_H
 				WorldRenderer.fill_rect(rx, ry, randf_range(8, 22), randf_range(8, 16),
 										Color(0.38, 0.32, 0.24, 0.80), 1, _scene_root)
+		"forest":
+			var tree_col_a := Color(0.12, 0.42, 0.14, 0.92)
+			var tree_col_b := Color(0.18, 0.56, 0.20, 0.85)
+			var trunk_col  := Color(0.36, 0.26, 0.16, 0.80)
+			for _ti: int in range(9):
+				var tx: float = bx + randf_range(20.0, WorldData.BLOCK_W - 20.0)
+				var ty: float = by_ + randf_range(20.0, WorldData.BLOCK_H - 20.0)
+				var tr: float = randf_range(22.0, 50.0)
+				var tc: Color = tree_col_a if randf() < 0.60 else tree_col_b
+				WorldRenderer.fill_rect(tx - tr, ty - tr, tr * 2.0, tr * 2.0, tc, 1, _scene_root)
+				WorldRenderer.fill_rect(tx - 4.0, ty, 8.0, 22.0, trunk_col, 2, _scene_root)
+		"meadow":
+			var flower_colors: Array = [
+				Color(0.92, 0.28, 0.35, 0.85),
+				Color(0.95, 0.82, 0.12, 0.85),
+				Color(0.62, 0.38, 0.88, 0.85),
+				Color(1.00, 1.00, 1.00, 0.75),
+				Color(0.95, 0.58, 0.20, 0.80),
+			]
+			for _fi: int in range(24):
+				var fx: float = bx + randf_range(6.0, WorldData.BLOCK_W - 6.0)
+				var fy: float = by_ + randf_range(6.0, WorldData.BLOCK_H - 6.0)
+				var fc: Color = flower_colors[randi() % flower_colors.size()]
+				WorldRenderer.fill_rect(fx - 5.0, fy - 5.0, 10.0, 10.0, fc, 1, _scene_root)
+		"nature_pond":
+			var water_col  := Color(0.24, 0.52, 0.72, 0.88)
+			var shimmer    := Color(0.60, 0.84, 0.96, 0.55)
+			var reed_col   := Color(0.24, 0.46, 0.20, 0.92)
+			var pond_w: float = WorldData.BLOCK_W - 120.0
+			var pond_h: float = WorldData.BLOCK_H - 80.0
+			WorldRenderer.fill_rect(bx + 60.0, by_ + 40.0, pond_w, pond_h, water_col, 1, _scene_root)
+			WorldRenderer.fill_rect(bx + 90.0, by_ + 56.0, 80.0, 28.0, shimmer, 2, _scene_root)
+			for _ri: int in range(8):
+				var rx: float = bx + randf_range(40.0, WorldData.BLOCK_W - 40.0)
+				WorldRenderer.fill_rect(rx - 3.0, by_ + randf_range(28.0, 48.0), 6.0, 28.0, reed_col, 3, _scene_root)
+				var rx2: float = bx + randf_range(40.0, WorldData.BLOCK_W - 40.0)
+				var ry2: float = by_ + randf_range(WorldData.BLOCK_H - 48.0, WorldData.BLOCK_H - 28.0)
+				WorldRenderer.fill_rect(rx2 - 3.0, ry2, 6.0, 28.0, reed_col, 3, _scene_root)
 
 
 # =============================================================================

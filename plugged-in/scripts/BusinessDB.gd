@@ -4,13 +4,7 @@ extends Node
 #  BusinessDB — Autoload singleton.
 #  Maps every biz_type string (from DISTRICT_BLDG_CONFIG) to an economic recipe.
 #
-#  Recipe fields:
-#    inputs     : {item_id → qty}   items consumed per NOON production tick
-#    outputs    : {item_id → qty}   items produced per NOON production tick
-#    employees  : int               headcount needed to operate at full capacity
-#    services   : Array[String]     biz_type names this building must be supplied by
-#    category   : String            determines rent ratio and economic role
-#    wage_band  : String            "low" | "mid" | "high" → daily wage per employee
+
 #
 #  Supply chain overview:
 #    Harbor (Import/Export Co., Warehouse, Fishery, Cold Store)
@@ -64,15 +58,25 @@ func _build_recipes() -> void:
 		# Residential buildings consume PROPERTY_MANAGEMENT each cycle.
 		# If none is available (no Estate Agency operational), the building
 		# is gated by _check_property_management() in EconomyTicker.
-		"House":              _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
+
+		#  Recipe fields:
+#    inputs     : {item_id → qty}   items consumed per NOON production tick
+#    outputs    : {item_id → qty}   items produced per NOON production tick
+#    employees  : int               headcount needed to operate at full capacity
+#    services   : Array[String]     biz_type names this building must be supplied by
+#    category   : String            determines rent ratio and economic role
+#    wage_band  : String            "low" | "mid" | "high" → daily wage per employee
+
+
+		"House":              _r({I.PROPERTY_MANAGEMENT: 2}, {},                                0,  [], "residential", "low"),
 		"Cottage":            _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
 		"Bungalow":           _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
 		"Flat":               _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
 		"Tenement":           _r({I.PROPERTY_MANAGEMENT: 1}, {},                                0,  [], "residential", "low"),
-		"Manor House":        _r({I.PROPERTY_MANAGEMENT: 1}, {},                                1,  [], "residential", "mid"),
+		"Manor House":        _r({I.PROPERTY_MANAGEMENT: 3}, {},                                1,  [], "residential", "mid"),
 
 		# ── Food Production ───────────────────────────────────────────────────
-		"Bakery":             _r({I.FOOD_INGREDIENT: 4},    {I.STREET_FOOD: 6},               2, ["Bank"],          "production",  "low"),
+		"Bakery":             _r({I.FOOD_INGREDIENT: 4},    {I.STREET_FOOD: 6},               2, [],          "production",  "low"),
 		"Fishery":            _r({},                        {I.FOOD_INGREDIENT: 8},           3, [],                "production",  "low"),
 		"Takeaway":           _r({I.FOOD_INGREDIENT: 2},    {I.STREET_FOOD: 3},               1, [],                "production",  "low"),
 		"Street Food":        _r({I.FOOD_INGREDIENT: 2},    {I.STREET_FOOD: 4},               1, [],                "retail",      "low"),
@@ -85,11 +89,11 @@ func _build_recipes() -> void:
 		# ── Industrial Production ─────────────────────────────────────────────
 		"Scrapyard":          _r({},                        {I.RAW_MATERIAL: 6, I.SCRAP_METAL: 4}, 3, [],          "industrial",  "low"),
 		"Depot":              _r({},                        {I.RAW_MATERIAL: 3},             2, [],                "industrial",  "low"),
-		"Factory":            _r({I.RAW_MATERIAL: 5},       {I.TOOLS: 3, I.CHARGER: 2},      6, ["Bank"],          "industrial",  "mid"),
+		"Factory":            _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1,I.RAW_MATERIAL: 5},       {I.TOOLS: 3, I.CHARGER: 2},      6, ["Bank"],          "industrial",  "mid"),
 		"Forge":              _r({I.RAW_MATERIAL: 4},       {I.TOOLS: 5},                    4, [],                "industrial",  "mid"),
 		"Mill":               _r({I.RAW_MATERIAL: 3},       {I.TOOLS: 2},                    3, [],                "industrial",  "mid"),
 		"Printing Works":     _r({I.RAW_MATERIAL: 1},       {I.BOOK: 4},                     2, [],                "industrial",  "low"),
-		"Chip Factory":       _r({I.RAW_MATERIAL: 3},       {I.ELECTRONICS_COMPONENT: 6},    5, ["Bank"],          "industrial",  "mid"),
+		"Chip Factory":       _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1, I.RAW_MATERIAL: 3},       {I.ELECTRONICS_COMPONENT: 6},    5, ["Bank"],          "industrial",  "mid"),
 		"Auto Shop":          _r({I.RAW_MATERIAL: 2},       {I.TOOLS: 2},                    3, [],                "commercial",  "mid"),
 		"Chandlery":          _r({I.RAW_MATERIAL: 2},       {I.TOOLS: 3},                    2, [],                "commercial",  "mid"),
 		"Cobbler":            _r({I.RAW_MATERIAL: 1},       {I.STREETWEAR: 1},               1, [],                "commercial",  "low"),
@@ -97,23 +101,23 @@ func _build_recipes() -> void:
 		"Ship Repair":        _r({I.RAW_MATERIAL: 4, I.TOOLS: 2}, {},                        5, [],                "industrial",  "mid"),
 
 		# ── Harbor / Import ───────────────────────────────────────────────────
-		"Warehouse":          _r({},                        {I.RAW_MATERIAL: 4, I.FOOD_INGREDIENT: 3}, 3, [],       "import",      "low"),
-		"Cold Store":         _r({},                        {I.FOOD_INGREDIENT: 5},          2, [],                "storage",     "low"),
-		"Import/Export Co.":  _r({},                        {I.FOOD_INGREDIENT: 10, I.RAW_MATERIAL: 8, I.ELECTRONICS_COMPONENT: 5},
-		                                                                                      4, ["Bank", "Law Firm"], "import",   "mid"),
-		"Customs Office":     _r({},                        {},                              3, ["Law Firm"],       "government",  "mid"),
+		"Warehouse":          _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1,},                        {I.RAW_MATERIAL: 4, I.FOOD_INGREDIENT: 3}, 3, [],       "import",      "low"),
+		"Cold Store":         _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1,},                        {I.FOOD_INGREDIENT: 5},          2, [],                "storage",     "low"),
+		"Import/Export Co.":  _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1,},                        {I.FOOD_INGREDIENT: 10, I.RAW_MATERIAL: 8, I.ELECTRONICS_COMPONENT: 5},
+																							  4, ["Bank", "Law Firm"], "import",   "mid"),
+		"Customs Office":     _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1,},                        {},                              3, ["Law Firm"],       "government",  "mid"),
 		"Dockside Bar":       _r({I.FOOD_INGREDIENT: 2},    {I.BEER: 5},                     2, [],                "hospitality", "low"),
 
 		# ── Financial ─────────────────────────────────────────────────────────
-		"Bank":               _r({I.LEGAL_SERVICE: 1},      {I.FINANCIAL_SERVICE: 10},       5, [],                "financial",   "high"),
-		"Insurance Co.":      _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1},
-		                         {I.FINANCIAL_SERVICE: 3},                                   4, ["Bank"],          "financial",   "high"),
-		"Server Farm":        _r({I.ELECTRONICS_COMPONENT: 5}, {I.FINANCIAL_SERVICE: 2},     4, ["Bank"],          "tech",        "high"),
+		"Bank":               _r({I.LEGAL_SERVICE: 1, I.TECH_SUPPORT: 3},      {I.FINANCIAL_SERVICE: 10},       5, [],                "financial",   "high"),
+		"Insurance Co.":      _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1, I.TECH_SUPPORT: 3},
+								 {I.FINANCIAL_SERVICE: 3},                                   4, ["Bank"],          "financial",   "high"),
+		"Server Farm":        _r({I.ELECTRONICS_COMPONENT: 5, I.TECH_SUPPORT: 1}, {I.FINANCIAL_SERVICE: 2},     4, ["Bank"],          "tech",        "high"),
 		"Bitcoin ATM":        _r({},                        {},                              0, ["Bank"],           "financial",   "high"),
 
 		# ── Legal ─────────────────────────────────────────────────────────────
-		"Law Firm":           _r({},                        {I.LEGAL_SERVICE: 8},            4, ["Bank"],          "legal",       "high"),
-		"Guild Hall":         _r({},                        {I.LEGAL_SERVICE: 3},            2, [],                "legal",       "mid"),
+		"Law Firm":           _r({I.FINANCIAL_SERVICE: 1},                        {I.LEGAL_SERVICE: 8},            4, ["Bank"],          "legal",       "high"),
+		"Guild Hall":         _r({I.FINANCIAL_SERVICE: 1},                        {I.LEGAL_SERVICE: 3},            2, [],                "legal",       "mid"),
 		# ── Property Management ───────────────────────────────────────────────
 		# Estate Agencies employ staff to manage properties, producing
 		# PROPERTY_MANAGEMENT tokens consumed by all residential buildings.
@@ -128,22 +132,22 @@ func _build_recipes() -> void:
 		"Bookshop":           _r({I.RAW_MATERIAL: 1},       {I.BOOK: 4},                     1, [],                "retail",      "low"),
 		"Textile Shop":       _r({I.RAW_MATERIAL: 2},       {I.STREETWEAR: 3},               2, [],                "retail",      "low"),
 		"Electronics Bazaar": _r({I.ELECTRONICS_COMPONENT: 3},
-		                         {I.USB_CABLE: 4, I.CHARGER: 3, I.PHONE_CASE: 2, I.SIM_CARD: 2, I.HEADPHONES: 1},
-		                                                                                      2, [],                "retail",      "low"),
+								 {I.USB_CABLE: 4, I.CHARGER: 3, I.PHONE_CASE: 2, I.SIM_CARD: 2, I.HEADPHONES: 1},
+																							  2, [],                "retail",      "low"),
 		"Jewellers":          _r({I.RAW_MATERIAL: 1},       {I.ANTIQUE: 2},                  2, ["Bank"],          "retail",      "mid"),
 		"Import Store":       _r({I.FOOD_INGREDIENT: 1, I.ELECTRONICS_COMPONENT: 1, I.RAW_MATERIAL: 1},
-		                         {I.SPICES: 2, I.USB_CABLE: 2, I.TOOLS: 1},                 2, ["Bank"],          "retail",      "mid"),
-		"Surf Shop":          _r({},                        {I.SUNGLASSES: 2, I.STREETWEAR: 2}, 2, [],             "retail",      "low"),
-		"Pawn Shop":          _r({},                        {I.SCRAP_METAL: 2, I.FAKE_ID: 1}, 1, [],                "retail",      "low"),
-		"Laundromat":         _r({},                        {},                              1, [],                "commercial",  "low"),
-		"Gallery":            _r({},                        {I.ANTIQUE: 1},                  2, ["Bank"],          "entertainment","mid"),
+								 {I.SPICES: 2, I.USB_CABLE: 2, I.TOOLS: 1},                 2, ["Bank"],          "retail",      "mid"),
+		"Surf Shop":          _r({I.RAW_MATERIAL: 1},                        {I.SUNGLASSES: 2, I.STREETWEAR: 2}, 2, [],             "retail",      "low"),
+		"Pawn Shop":          _r({I.RAW_MATERIAL: 1},                        {I.SCRAP_METAL: 2, I.FAKE_ID: 1}, 1, [],                "retail",      "low"),
+		"Laundromat":         _r({I.RAW_MATERIAL: 1},                        {},                              1, [],                "commercial",  "low"),
+		"Gallery":            _r({I.RAW_MATERIAL: 1},                        {I.ANTIQUE: 1},                  2, ["Bank"],          "entertainment","mid"),
 
 		# ── Hospitality ───────────────────────────────────────────────────────
-		"Restaurant":         _r({I.FOOD_INGREDIENT: 6},    {I.STREET_FOOD: 8, I.BEER: 4},   4, ["Bank"],          "hospitality", "low"),
-		"Bar":                _r({I.FOOD_INGREDIENT: 2},    {I.BEER: 6},                     2, [],                "hospitality", "low"),
-		"Beach Bar":          _r({I.FOOD_INGREDIENT: 2},    {I.BEER: 5, I.ICE_CREAM: 2},     2, [],                "hospitality", "low"),
-		"Beachside Cafe":     _r({I.FOOD_INGREDIENT: 3},    {I.COFFEE: 5, I.ICE_CREAM: 3},   2, [],                "hospitality", "low"),
-		"Ice Cream Parlour":  _r({I.FOOD_INGREDIENT: 2},    {I.ICE_CREAM: 5},                2, [],                "hospitality", "low"),
+		"Restaurant":         _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 6},    {I.STREET_FOOD: 8, I.BEER: 4},   4, ["Bank"],          "hospitality", "low"),
+		"Bar":                _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 2},    {I.BEER: 6},                     2, ["Bank"],                "hospitality", "low"),
+		"Beach Bar":          _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 2},    {I.BEER: 5, I.ICE_CREAM: 2},     2, ["Bank"],                "hospitality", "low"),
+		"Beachside Cafe":     _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 3},    {I.COFFEE: 5, I.ICE_CREAM: 3},   2, ["Bank"],                "hospitality", "low"),
+		"Ice Cream Parlour":  _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 2},    {I.ICE_CREAM: 5},                2, ["Bank"],                "hospitality", "low"),
 		"Hotel":              _r({I.FINANCIAL_SERVICE: 1},  {},                              6, ["Bank"],           "hospitality", "mid"),
 		"Tourist Hotel":      _r({I.FINANCIAL_SERVICE: 1},  {},                              5, ["Bank"],           "hospitality", "mid"),
 		"Resort":             _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 4}, {},         8, ["Bank"],           "hospitality", "mid"),
@@ -153,8 +157,8 @@ func _build_recipes() -> void:
 		"Fine Dining":        _r({I.FOOD_INGREDIENT: 5},    {I.FINE_DINING: 3},                  5, ["Bank"],           "hospitality", "high"),
 
 		# ── Entertainment ─────────────────────────────────────────────────────
-		"Casino":             _r({I.FINANCIAL_SERVICE: 2},  {},                              8, ["Bank", "Law Firm"],"entertainment","mid"),
-		"Nightclub":          _r({I.FOOD_INGREDIENT: 2},    {I.BEER: 4},                     5, ["Bank"],           "entertainment","mid"),
+		"Casino":             _r({I.LEGAL_SERVICE: 1, I.FINANCIAL_SERVICE: 2},  {},                              8, ["Bank", "Law Firm"],"entertainment","mid"),
+		"Nightclub":          _r({I.FINANCIAL_SERVICE: 1, I.FOOD_INGREDIENT: 2},    {I.BEER: 4},                     5, ["Bank"],           "entertainment","mid"),
 		"Arcade":             _r({I.ELECTRONICS_COMPONENT: 1}, {},                           2, [],                "entertainment","low"),
 		"Show Venue":         _r({},                        {},                              4, ["Bank"],           "entertainment","mid"),
 		"VR Studio":          _r({I.ELECTRONICS_COMPONENT: 2}, {},                           3, ["Bank"],           "tech",        "high"),
@@ -162,17 +166,16 @@ func _build_recipes() -> void:
 		"Sunbed Rental":      _r({},                        {},                              1, [],                "commercial",  "low"),
 
 		# ── Tech ─────────────────────────────────────────────────────────────
-		"Tech Lab":           _r({I.ELECTRONICS_COMPONENT: 3},
-		                         {I.LAPTOP: 2, I.CAMERA: 1},                                5, ["Bank", "Law Firm"],"tech",        "high"),
-		"Startup Hub":        _r({I.ELECTRONICS_COMPONENT: 2}, {},                           4, ["Bank"],           "tech",        "high"),
-		"Data Centre":        _r({I.ELECTRONICS_COMPONENT: 4}, {},                           3, ["Bank", "Law Firm"],"tech",        "high"),
-		"Co-working Space":   _r({},                        {},                              1, ["Bank"],            "commercial",  "mid"),
-		"R&D Campus":         _r({I.ELECTRONICS_COMPONENT: 3, I.RAW_MATERIAL: 2},
-		                         {I.LAPTOP: 1, I.HEADPHONES: 2},                             6, ["Bank", "Law Firm"],"tech",        "high"),
+		"Tech Lab":           _r({I.ELECTRONICS_COMPONENT: 3, I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1}, {I.LAPTOP: 2, I.CAMERA: 1},                                5, ["Bank", "Law Firm"],"tech",        "high"),
+		"Startup Hub":        _r({I.ELECTRONICS_COMPONENT: 1, I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1}, {I.TECH_SUPPORT: 5},                           4, ["Bank", "Law Firm"],           "tech",        "high"),
+		"Data Centre":        _r({I.ELECTRONICS_COMPONENT: 2, I.FINANCIAL_SERVICE: 2, I.LEGAL_SERVICE: 2}, {I.TECH_SUPPORT: 10},                           3, ["Bank", "Law Firm"],"tech",        "high"),
+		"Co-working Space":   _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1},                        {I.TECH_SUPPORT: 1},                              1, ["Bank"],            "commercial",  "mid"),
+		"R&D Campus":         _r({I.ELECTRONICS_COMPONENT: 3, I.RAW_MATERIAL: 2, I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1},
+								 {I.LAPTOP: 1, I.HEADPHONES: 2, I.TECH_SUPPORT: 5},                             6, ["Bank", "Law Firm"],"tech",        "high"),
 
 		# ── Office ────────────────────────────────────────────────────────────
 		"Office Tower":       _r({I.FINANCIAL_SERVICE: 1, I.LEGAL_SERVICE: 1},
-		                         {I.FINANCIAL_SERVICE: 3},                                  10, ["Bank", "Law Firm"],"office",      "high"),
+								 {I.FINANCIAL_SERVICE: 3},                                  10, ["Bank", "Law Firm"],"office",      "high"),
 	}
 
 

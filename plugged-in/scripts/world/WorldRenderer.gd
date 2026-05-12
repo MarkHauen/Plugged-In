@@ -109,6 +109,75 @@ static func draw_road_nodes(road_graph: Object, debug_layer: Node) -> void:
 		dot.z_index  = 15
 		debug_layer.add_child(dot)
 
+		var lbl := Label.new()
+		lbl.text = "(%d,%d)" % [int(n_pos.x), int(n_pos.y)]
+		lbl.position = Vector2(7.0, -14.0)
+		lbl.z_index  = 15
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.0, 0.95, 0.85, 0.90))
+		dot.add_child(lbl)
+
+
+## Draw numbered handles on every ISLAND_POLY vertex into debug_layer.
+## Each vertex shows:  [index]  Vector2(x, y)
+## The boundary edge is also drawn as a coloured polyline so the outline is
+## visible against any terrain.  Handles are large enough to read at any zoom.
+static func draw_island_vertex_handles(debug_layer: Node) -> void:
+	var pts := WorldData.ISLAND_POLY
+	var n   := pts.size()
+
+	# ── Edge outline ──────────────────────────────────────────────────────────
+	# Draw each edge as a flat rectangle (Line2D not available in pure-code
+	# scene trees without a Node2D parent that autodraws, so we use thin polys).
+	for i: int in range(n):
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % n]
+		var line := Line2D.new()
+		line.add_point(a)
+		line.add_point(b)
+		line.width         = 6.0
+		line.default_color = Color(1.0, 0.55, 0.10, 0.70)  # orange
+		line.z_index       = 20
+		debug_layer.add_child(line)
+
+	# ── Per-vertex handles ────────────────────────────────────────────────────
+	for i: int in range(n):
+		var pt: Vector2 = pts[i]
+
+		# Diamond marker
+		var dot := Polygon2D.new()
+		dot.polygon = PackedVector2Array([
+			Vector2(0.0, -18.0), Vector2(18.0, 0.0),
+			Vector2(0.0,  18.0), Vector2(-18.0, 0.0),
+		])
+		dot.color    = Color(1.0, 0.92, 0.10, 0.90)   # yellow
+		dot.position = pt
+		dot.z_index  = 22
+		debug_layer.add_child(dot)
+
+		# Dark outline ring so the dot pops against bright ground
+		var outline := Polygon2D.new()
+		outline.polygon = PackedVector2Array([
+			Vector2(0.0, -22.0), Vector2(22.0, 0.0),
+			Vector2(0.0,  22.0), Vector2(-22.0, 0.0),
+		])
+		outline.color    = Color(0.0, 0.0, 0.0, 0.55)
+		outline.position = pt
+		outline.z_index  = 21
+		debug_layer.add_child(outline)
+
+		# Label:  [i]  (x, y)
+		var lbl := Label.new()
+		lbl.text     = "[%d]  Vector2(%d, %d)" % [i, int(pt.x), int(pt.y)]
+		lbl.position = pt + Vector2(26.0, -14.0)
+		lbl.z_index  = 23
+		lbl.add_theme_font_size_override("font_size", 22)
+		lbl.add_theme_color_override("font_color",        Color(1.0,  0.95, 0.20))
+		lbl.add_theme_color_override("font_shadow_color", Color(0.0,  0.0,  0.0, 0.80))
+		lbl.add_theme_constant_override("shadow_offset_x", 2)
+		lbl.add_theme_constant_override("shadow_offset_y", 2)
+		debug_layer.add_child(lbl)
+
 
 ## Build invisible StaticBody2D collision segments along the island boundary.
 static func build_island_boundary(parent: Node) -> void:

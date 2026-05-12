@@ -37,9 +37,10 @@ enum ID {
 	FINANCIAL_SERVICE,      # 25
 	LEGAL_SERVICE,          # 26
 	PROPERTY_MANAGEMENT,    # 27
+	TECH_SUPPORT,           # 28
 	# ── Luxury Food & Drink ─────────────────────────────────────────
-	COCKTAIL,      # 28
-	FINE_DINING,   # 29
+	COCKTAIL,      # 29
+	FINE_DINING,   # 30
 }
 
 ## item_id (ItemDB.ID) → { "name": String, "base_price": int }
@@ -83,6 +84,7 @@ const CATALOG: Dictionary = {
 	ID.FINANCIAL_SERVICE:      { "name": "Financial Service",      "base_price": 50, "intermediate": true },
 	ID.LEGAL_SERVICE:          { "name": "Legal Service",          "base_price": 75, "intermediate": true },
 	ID.PROPERTY_MANAGEMENT:    { "name": "Property Mgmt",          "base_price": 40, "intermediate": true },
+	ID.TECH_SUPPORT:           { "name": "Tech Support",           "base_price": 60, "intermediate": true },
 }
 
 
